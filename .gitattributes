@@ -1,0 +1,8 @@
+* text=auto eol=lf
+
+# Windows-specific binaries / resources keep their native form
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.woff2 binary
