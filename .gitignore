@@ -44,3 +44,6 @@ playwright-report/
 *.sqlite
 *.sqlite-journal
 *.db
+
+# Tool-local caches
+.zcode/

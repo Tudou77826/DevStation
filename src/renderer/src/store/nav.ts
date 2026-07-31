@@ -1,5 +1,9 @@
-// Navigation model for the left sidebar.
+// Navigation model for the left sidebar and the center work area.
 // Stage 1 uses mock data only; Stage 2 swaps this for SQLite-backed state.
+//
+// Key rule (MVP plan §4): the CENTER WORK AREA must change with the active
+// primary section. The 4 tabs (对话/变更/终端/文件) belong ONLY to the
+// AI Space session view; 任务面板 shows a task list; 工作流 shows a placeholder.
 import { create } from 'zustand'
 import type { NavSection, WorkAreaTab } from '@shared/types'
 
@@ -41,29 +45,120 @@ export const SECONDARY_NAV: Record<NavSection, readonly NavSecondaryItem[]> = {
   ]
 } as const
 
+// ── Mock domain data (Stage 1 only) ─────────────────────────────────────────
+
+export type TaskStatus = 'todo' | 'in-progress' | 'done'
+
+export interface Task {
+  id: string
+  title: string
+  status: TaskStatus
+  project: string
+  branch: string
+  updatedAt: string
+}
+
+export const MOCK_TASKS: readonly Task[] = [
+  {
+    id: 't-1',
+    title: '实现用户登录态校验',
+    status: 'in-progress',
+    project: 'web-platform',
+    branch: 'feat/auth-guard',
+    updatedAt: '2 分钟前'
+  },
+  {
+    id: 't-2',
+    title: '修复终端 resize 后中文输入错位',
+    status: 'in-progress',
+    project: 'DevStation',
+    branch: 'fix/pty-resize',
+    updatedAt: '14 分钟前'
+  },
+  {
+    id: 't-3',
+    title: '新增项目列表 SQLite 持久化',
+    status: 'todo',
+    project: 'DevStation',
+    branch: 'feat/sqlite-store',
+    updatedAt: '1 小时前'
+  },
+  {
+    id: 't-4',
+    title: 'Diff Viewer 接入行级评论',
+    status: 'done',
+    project: 'DevStation',
+    branch: 'feat/diff-review',
+    updatedAt: '昨天'
+  }
+] as const
+
+// ── Store ───────────────────────────────────────────────────────────────────
+
 interface NavState {
+  /** active primary section — drives which center view is rendered */
   activeSection: NavSection
-  activeSecondaryId: string
-  collapsed: boolean
+  /** active secondary nav id, scoped per-section */
+  activeSecondaryId: Record<NavSection, string>
+  sidebarCollapsed: boolean
+
+  /** AI Space session work tab (对话/变更/终端/文件) */
   activeWorkTab: WorkAreaTab
+
+  /** selected task id in 任务面板 */
+  selectedTaskId: string | null
+
   rightPanelOpen: boolean
+
+  /** resizable panel widths (px) */
+  sidebarWidth: number
+  rightPanelWidth: number
+
   setSection: (section: NavSection) => void
   setSecondary: (id: string) => void
-  toggleCollapsed: () => void
+  toggleSidebar: () => void
   setWorkTab: (tab: WorkAreaTab) => void
+  selectTask: (id: string | null) => void
   toggleRightPanel: () => void
+  setSidebarWidth: (w: number) => void
+  setRightPanelWidth: (w: number) => void
 }
 
 export const useNavStore = create<NavState>((set) => ({
-  activeSection: 'ai-space',
-  activeSecondaryId: 'sessions',
-  collapsed: false,
+  activeSection: 'tasks',
+  activeSecondaryId: {
+    tasks: 'all',
+    'ai-space': 'sessions',
+    workflow: 'overview'
+  },
+  sidebarCollapsed: false,
   activeWorkTab: 'conversation',
+  selectedTaskId: 't-1',
   rightPanelOpen: true,
-  setSection: (section) =>
-    set({ activeSection: section, activeSecondaryId: SECONDARY_NAV[section][0]?.id ?? '' }),
-  setSecondary: (id) => set({ activeSecondaryId: id }),
-  toggleCollapsed: () => set((s) => ({ collapsed: !s.collapsed })),
+  sidebarWidth: 240,
+  rightPanelWidth: 320,
+
+  setSection: (section) => set({ activeSection: section }),
+  setSecondary: (id) =>
+    set((s) => ({
+      activeSecondaryId: { ...s.activeSecondaryId, [s.activeSection]: id }
+    })),
+  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setWorkTab: (tab) => set({ activeWorkTab: tab }),
-  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen }))
+  selectTask: (id) => set({ selectedTaskId: id }),
+  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+  setSidebarWidth: (w) => set({ sidebarWidth: clamp(w, 200, 360) }),
+  setRightPanelWidth: (w) => set({ rightPanelWidth: clamp(w, 260, 480) })
 }))
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+/** Helper: resolve the secondary id for a given section. */
+export function secondaryIdOf(
+  state: Pick<NavState, 'activeSecondaryId'>,
+  section: NavSection
+): string {
+  return state.activeSecondaryId[section]
+}

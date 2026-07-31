@@ -161,3 +161,14 @@
     background: var(--muted-foreground);
   }
 }
+
+/* ── Window drag region (custom title bar overlay) ───────────────────── */
+/* The native title bar is hidden on Windows; this thin strip at the very top
+   makes the window draggable again. Interactive elements inside opt out with
+   .no-drag. The strip is transparent so it doesn't affect the layout. */
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}

@@ -4,11 +4,16 @@ import {
   Workflow,
   PanelLeftClose,
   PanelLeft,
+  Sun,
+  Moon,
+  Settings2,
   type LucideIcon
 } from 'lucide-react'
 import type { NavSection } from '@shared/types'
 import { PRIMARY_NAV } from '@/store/nav'
 import { useNavStore } from '@/store/nav'
+import { useThemeStore } from '@/store/theme'
+import { useUIStore } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
 // Map the string icon name in the nav model to an actual lucide component.
@@ -22,8 +27,11 @@ const ICONS: Record<string, LucideIcon> = {
 export function IconRail(): React.ReactElement {
   const activeSection = useNavStore((s) => s.activeSection)
   const setSection = useNavStore((s) => s.setSection)
-  const collapsed = useNavStore((s) => s.collapsed)
-  const toggleCollapsed = useNavStore((s) => s.toggleCollapsed)
+  const collapsed = useNavStore((s) => s.sidebarCollapsed)
+  const toggleCollapsed = useNavStore((s) => s.toggleSidebar)
+  const resolved = useThemeStore((s) => s.resolved)
+  const toggleTheme = useThemeStore((s) => s.toggle)
+  const openSettings = useUIStore((s) => s.openSettings)
 
   return (
     <nav
@@ -57,15 +65,35 @@ export function IconRail(): React.ReactElement {
         })}
       </div>
 
-      <button
-        type="button"
-        title={collapsed ? '展开侧边栏' : '收起侧边栏'}
-        aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
-        onClick={toggleCollapsed}
-        className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-      >
-        {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
-      </button>
+      <div className="flex flex-col items-center gap-1">
+        <button
+          type="button"
+          title={resolved === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
+          aria-label={resolved === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
+          onClick={toggleTheme}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          {resolved === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+        <button
+          type="button"
+          title="设置"
+          aria-label="设置"
+          onClick={() => openSettings(activeSection)}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          <Settings2 size={18} />
+        </button>
+        <button
+          type="button"
+          title={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
+          onClick={toggleCollapsed}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          {collapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
+        </button>
+      </div>
     </nav>
   )
 }

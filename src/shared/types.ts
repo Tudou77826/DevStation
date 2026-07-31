@@ -12,6 +12,11 @@
 export interface DevStationAPI {
   readonly version: string
   readonly platform: string
+  /** capabilities exposed to the sandboxed renderer */
+  readonly theme: {
+    /** push the resolved theme so the native window chrome can follow it */
+    update: (theme: 'dark' | 'light') => Promise<unknown>
+  }
 }
 
 /** First-level navigation entries in the left sidebar. */

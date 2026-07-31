@@ -2,6 +2,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import './assets/main.css'
+// Importing the theme store applies the saved theme on first paint and wires
+// the OS-theme listener. Import for its side effects before the app renders.
+import './store/theme'
 
 const container = document.getElementById('root')
 if (container === null) {

@@ -23,7 +23,7 @@ const ICONS: Record<string, LucideIcon> = {
 
 export function NavTree(): React.ReactElement {
   const section = useNavStore((s) => s.activeSection)
-  const activeId = useNavStore((s) => s.activeSecondaryId)
+  const activeId = useNavStore((s) => s.activeSecondaryId[section])
   const setSecondary = useNavStore((s) => s.setSecondary)
   const items = SECONDARY_NAV[section]
 

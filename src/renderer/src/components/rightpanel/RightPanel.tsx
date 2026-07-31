@@ -1,4 +1,5 @@
 import { PanelRightClose, Activity, GitBranch, FileDiff } from 'lucide-react'
+import { ResizeHandle } from '@/components/common/ResizeHandle'
 import { useNavStore } from '@/store/nav'
 import { cn } from '@/lib/utils'
 
@@ -6,9 +7,20 @@ import { cn } from '@/lib/utils'
 // Collapsible (per MVP plan §4). Stage 1 = placeholder structure.
 export function RightPanel(): React.ReactElement {
   const toggle = useNavStore((s) => s.toggleRightPanel)
+  const width = useNavStore((s) => s.rightPanelWidth)
+  const setWidth = useNavStore((s) => s.setRightPanelWidth)
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-background">
+    <>
+      <ResizeHandle
+        side="left"
+        onDelta={(d) => setWidth(width - d)}
+        title="拖拽调整右侧面板宽度"
+      />
+    <aside
+      className="flex shrink-0 flex-col border-l border-border bg-background"
+      style={{ width }}
+    >
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
         <span className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
           概览
@@ -57,6 +69,7 @@ export function RightPanel(): React.ReactElement {
         </PanelCard>
       </div>
     </aside>
+    </>
   )
 }
 

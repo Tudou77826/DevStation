@@ -1,25 +1,34 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronUp, User, Bot, Settings, LogOut } from 'lucide-react'
+import { useUIStore } from '@/store/ui'
+import { useNavStore } from '@/store/nav'
 import { cn } from '@/lib/utils'
 
 interface MenuEntry {
   id: string
   label: string
   icon: typeof User
+  onSelect: () => void
 }
 
 // Menu expands upward (per MVP plan §4: user entry pinned at bottom-left,
-// fan-out goes up). Stage 1 only renders the structure; actions are stubs.
-const ENTRIES: readonly MenuEntry[] = [
-  { id: 'profile', label: '个人信息', icon: User },
-  { id: 'agent-settings', label: 'Agent 设置', icon: Bot },
-  { id: 'app-settings', label: '应用设置', icon: Settings },
-  { id: 'logout', label: '退出登录', icon: LogOut }
-] as const
+// fan-out goes up). '应用设置' opens the full-page settings view, recording
+// the current nav section so the Back button returns here.
+function useEntries(): readonly MenuEntry[] {
+  const openSettings = useUIStore((s) => s.openSettings)
+  const activeSection = useNavStore((s) => s.activeSection)
+  return [
+    { id: 'profile', label: '个人信息', icon: User, onSelect: () => openSettings(activeSection, 'appearance') },
+    { id: 'agent-settings', label: 'Agent 设置', icon: Bot, onSelect: () => openSettings(activeSection, 'general') },
+    { id: 'app-settings', label: '应用设置', icon: Settings, onSelect: () => openSettings(activeSection, 'appearance') },
+    { id: 'logout', label: '退出登录', icon: LogOut, onSelect: () => {} }
+  ]
+}
 
 export function UserMenu(): React.ReactElement {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const entries = useEntries()
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -47,12 +56,15 @@ export function UserMenu(): React.ReactElement {
           role="menu"
           className="absolute bottom-full left-2 right-2 mb-2 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-xl"
         >
-          {ENTRIES.map((entry) => (
+          {entries.map((entry) => (
             <button
               key={entry.id}
               type="button"
               role="menuitem"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false)
+                entry.onSelect()
+              }}
               className={cn(
                 'flex w-full items-center gap-2.5 px-3 py-2 text-[13px] text-popover-foreground transition-colors',
                 'hover:bg-accent hover:text-accent-foreground'
