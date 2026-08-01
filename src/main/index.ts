@@ -1,10 +1,34 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
-import { fileURLToPath } from 'node:url'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { mkdirSync } from 'node:fs'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
+import { TerminalManager } from './terminal/terminal-manager'
+import { Database } from './db/database'
+import { initializeDatabase } from './db/schema'
+import { ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
+import { buildRegistry } from './rpc/methods'
+import { createDispatcher } from './rpc/dispatcher'
+import type { RpcContext } from './rpc/core'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+// End-to-end tests must never touch a developer's real Electron profile. The
+// override is deliberately restricted to unpackaged builds and an explicit
+// test flag so production launches cannot redirect user data accidentally.
+const e2eUserDataDir = process.env['DEVSTATION_E2E_USER_DATA_DIR']
+if (!app.isPackaged && process.env['DEVSTATION_E2E'] === '1' && e2eUserDataDir) {
+  mkdirSync(e2eUserDataDir, { recursive: true })
+  app.setPath('userData', e2eUserDataDir)
+}
+
 let mainWindow: BrowserWindow | null = null
+const terminalManager = new TerminalManager()
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) app.quit()
+
+// Persistence (initialized lazily after app.ready). Closed on before-quit.
+let db: Database | null = null
 
 // Window chrome colors per theme. backgroundColor is applied at window
 // creation and on theme change; on Windows the title bar overlay (caption
@@ -32,6 +56,18 @@ function applyWindowChrome(window: BrowserWindow, theme: 'dark' | 'light'): void
   }
 }
 
+function isAllowedRendererNavigation(url: string): boolean {
+  try {
+    const candidate = new URL(url)
+    const devUrl = process.env['ELECTRON_RENDERER_URL']
+    if (devUrl !== undefined) return candidate.origin === new URL(devUrl).origin
+    const entry = new URL(pathToFileURL(join(__dirname, '../renderer/index.html')).href)
+    return candidate.protocol === 'file:' && candidate.pathname === entry.pathname
+  } catch {
+    return false
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -46,9 +82,14 @@ function createWindow(): void {
     // lets us recolor the title-bar strip so it follows the app theme instead
     // of the OS theme. On Linux this falls back to the default frame.
     titleBarStyle: process.platform === 'win32' ? 'hidden' : 'default',
-    titleBarOverlay: process.platform === 'win32'
-      ? { color: THEME_CHROME.dark.titleBar, symbolColor: THEME_CHROME.dark.symbol, height: 36 }
-      : undefined,
+    titleBarOverlay:
+      process.platform === 'win32'
+        ? {
+            color: THEME_CHROME.dark.titleBar,
+            symbolColor: THEME_CHROME.dark.symbol,
+            height: 36
+          }
+        : undefined,
     frame: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -61,22 +102,22 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
   })
+  terminalManager.watch(mainWindow.webContents)
 
   // Open external links in the system browser, never inside the app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
+    if (url.startsWith('https://') || url.startsWith('http://')) {
+      void shell.openExternal(url)
+    }
     return { action: 'deny' }
   })
-
-  // Renderer pushes the active theme here so the native window chrome
-  // (background + caption buttons) follows the app theme.
-  ipcMain.handle(
-    'theme:update',
-    (_event, theme: 'dark' | 'light') => {
-      if (mainWindow !== null) applyWindowChrome(mainWindow, theme)
-      return true
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedRendererNavigation(url)) return
+    event.preventDefault()
+    if (url.startsWith('https://') || url.startsWith('http://')) {
+      void shell.openExternal(url)
     }
-  )
+  })
 
   // electron-vite dev server in dev, built file in production.
   if (process.env['ELECTRON_RENDERER_URL'] !== undefined) {
@@ -86,8 +127,66 @@ function createWindow(): void {
   }
 }
 
+/**
+ * Initialize SQLite + run migrations. On failure, show an error dialog and quit
+ * rather than leaving a window open with no backing store.
+ * Resolves to the repositories bound to the open DB.
+ */
+function initPersistence(): {
+  tasks: TaskRepo
+  projects: ProjectRepo
+  sessions: SessionRepo
+} {
+  const dbPath = join(app.getPath('userData'), 'devstation.db')
+  const database = new Database(dbPath)
+  initializeDatabase(database)
+  db = database
+  return {
+    tasks: new TaskRepo(database),
+    projects: new ProjectRepo(database),
+    sessions: new SessionRepo(database)
+  }
+}
+
 // Ensure single instance before any window logic.
 void app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return
+  // 1. persistence first — if it fails, abort cleanly with a user-visible error.
+  let repositories
+  try {
+    repositories = initPersistence()
+  } catch (err) {
+    console.error('[DevStation] database initialization failed:', err)
+    dialog.showErrorBox(
+      'DevStation 无法启动',
+      '本地数据库初始化失败，应用将退出。请检查磁盘空间与读写权限后重试。'
+    )
+    app.quit()
+    return
+  }
+
+  // 2. RPC dispatcher on a single channel, sender-bound context.
+  const registry = buildRegistry()
+  const dispatcher = createDispatcher(
+    registry,
+    (sender): RpcContext => {
+      return { repositories, sender: BrowserWindow.fromWebContents(sender) }
+    },
+    (sender) =>
+      mainWindow !== null &&
+      !mainWindow.isDestroyed() &&
+      sender.id === mainWindow.webContents.id
+  )
+  ipcMain.handle('rpc', dispatcher)
+
+  // 3. theme + terminal (Stage 0/1 wiring) + window.
+  ipcMain.handle('theme:update', (_event, theme: 'dark' | 'light') => {
+    if (theme !== 'dark' && theme !== 'light') throw new Error('Unsupported theme')
+    const senderWindow = BrowserWindow.fromWebContents(_event.sender)
+    if (senderWindow !== null) applyWindowChrome(senderWindow, theme)
+    return true
+  })
+  terminalManager.registerIpc()
   createWindow()
 
   app.on('activate', () => {
@@ -97,8 +196,21 @@ void app.whenReady().then(() => {
   })
 })
 
+app.on('second-instance', () => {
+  if (mainWindow === null || mainWindow.isDestroyed()) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+})
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  terminalManager.dispose()
+  db?.close()
+  db = null
 })

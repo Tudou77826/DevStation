@@ -34,8 +34,11 @@ function applyToDocument(theme: ResolvedTheme): void {
 // Notify the main process so the native window chrome (background + caption
 // buttons) follows the app theme. No-op outside Electron (web preview).
 function pushToMain(theme: ResolvedTheme): void {
-  const api = (window as unknown as { devstation?: { theme?: { update?: (t: ResolvedTheme) => unknown } } })
-    .devstation?.theme?.update
+  const api = (
+    window as unknown as {
+      devstation?: { theme?: { update?: (t: ResolvedTheme) => unknown } }
+    }
+  ).devstation?.theme?.update
   if (typeof api === 'function') {
     try {
       void api(theme)

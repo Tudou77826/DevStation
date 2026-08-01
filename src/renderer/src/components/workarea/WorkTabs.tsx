@@ -1,4 +1,9 @@
-import { MessageSquare, GitCommitHorizontal, TerminalSquare, FileCode } from 'lucide-react'
+import {
+  MessageSquare,
+  GitCommitHorizontal,
+  TerminalSquare,
+  FileCode
+} from 'lucide-react'
 import type { WorkAreaTab } from '@shared/types'
 import { useNavStore } from '@/store/nav'
 import { cn } from '@/lib/utils'

@@ -9,6 +9,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { SECONDARY_NAV, useNavStore } from '@/store/nav'
+import { useDataStore } from '@/store/data'
 import { cn } from '@/lib/utils'
 
 const ICONS: Record<string, LucideIcon> = {
@@ -25,6 +26,8 @@ export function NavTree(): React.ReactElement {
   const section = useNavStore((s) => s.activeSection)
   const activeId = useNavStore((s) => s.activeSecondaryId[section])
   const setSecondary = useNavStore((s) => s.setSecondary)
+  const tasks = useDataStore((s) => s.tasks)
+  const projects = useDataStore((s) => s.projects)
   const items = SECONDARY_NAV[section]
 
   return (
@@ -35,6 +38,14 @@ export function NavTree(): React.ReactElement {
       {items.map((item) => {
         const Icon = ICONS[item.icon] ?? Inbox
         const active = item.id === activeId
+        const badge =
+          section === 'tasks'
+            ? item.id === 'all'
+              ? tasks.length
+              : tasks.filter((task) => task.status === item.id).length
+            : section === 'ai-space' && item.id === 'projects'
+              ? projects.length
+              : item.badge
         return (
           <button
             key={item.id}
@@ -49,9 +60,9 @@ export function NavTree(): React.ReactElement {
           >
             <Icon size={16} strokeWidth={1.75} className="shrink-0" />
             <span className="truncate">{item.label}</span>
-            {item.badge !== undefined && item.badge > 0 && (
+            {badge !== undefined && badge > 0 && (
               <span className="ml-auto rounded-full bg-secondary px-1.5 py-px text-[10px] font-medium tabular-nums text-secondary-foreground">
-                {item.badge}
+                {badge}
               </span>
             )}
           </button>

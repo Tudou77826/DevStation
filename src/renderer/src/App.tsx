@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { AISpaceWorkArea } from '@/components/workarea/AISpaceWorkArea'
 import { TaskPanel } from '@/components/tasks/TaskPanel'
@@ -6,6 +7,7 @@ import { RightPanel } from '@/components/rightpanel/RightPanel'
 import { Settings } from '@/components/settings/Settings'
 import { useNavStore } from '@/store/nav'
 import { useUIStore } from '@/store/ui'
+import { useDataStore } from '@/store/data'
 
 // Thin draggable strip across the very top. The native title bar is hidden on
 // Windows (overlay mode); this restores dragging. Caption buttons sit on top of
@@ -34,6 +36,12 @@ export default function App(): React.ReactElement {
   const section = useNavStore((s) => s.activeSection)
   const rightPanelOpen = useNavStore((s) => s.rightPanelOpen)
   const settingsOpen = useUIStore((s) => s.settingsOpen)
+  const loadAll = useDataStore((s) => s.loadAll)
+
+  // Hydrate SQLite-backed data on startup so lists are ready for any section.
+  useEffect(() => {
+    void loadAll()
+  }, [loadAll])
 
   if (settingsOpen) {
     return (

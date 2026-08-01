@@ -17,58 +17,60 @@ export function RightPanel(): React.ReactElement {
         onDelta={(d) => setWidth(width - d)}
         title="拖拽调整右侧面板宽度"
       />
-    <aside
-      className="flex shrink-0 flex-col border-l border-border bg-background"
-      style={{ width }}
-    >
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
-        <span className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
-          概览
-        </span>
-        <button
-          type="button"
-          onClick={toggle}
-          title="收起右侧面板"
-          aria-label="收起右侧面板"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        >
-          <PanelRightClose size={16} />
-        </button>
-      </div>
+      <aside
+        className="flex shrink-0 flex-col border-l border-border bg-background"
+        style={{ width }}
+      >
+        <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-3">
+          <span className="text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
+            概览
+          </span>
+          <button
+            type="button"
+            onClick={toggle}
+            title="收起右侧面板"
+            aria-label="收起右侧面板"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          >
+            <PanelRightClose size={16} />
+          </button>
+        </div>
 
-      <div className="flex-1 space-y-4 overflow-y-auto p-3">
-        <PanelCard icon={Activity} title="任务摘要">
-          <p className="text-[12px] leading-relaxed text-muted-foreground">
-            实现用户登录态校验
-          </p>
-          <div className="mt-2 flex items-center gap-2">
-            <StatusDot className="bg-status-warning" />
-            <span className="text-[11px] text-muted-foreground">进行中 · Agent 编码中</span>
-          </div>
-        </PanelCard>
+        <div className="flex-1 space-y-4 overflow-y-auto p-3">
+          <PanelCard icon={Activity} title="任务摘要">
+            <p className="text-[12px] leading-relaxed text-muted-foreground">
+              实现用户登录态校验
+            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <StatusDot className="bg-status-warning" />
+              <span className="text-[11px] text-muted-foreground">
+                进行中 · Agent 编码中
+              </span>
+            </div>
+          </PanelCard>
 
-        <PanelCard icon={Activity} title="Agent 状态">
-          <div className="space-y-1.5">
-            <StatusRow label="运行中" value="1" tone="success" />
-            <StatusRow label="等待用户" value="0" />
-            <StatusRow label="已完成" value="2" />
-          </div>
-        </PanelCard>
+          <PanelCard icon={Activity} title="Agent 状态">
+            <div className="space-y-1.5">
+              <StatusRow label="运行中" value="1" tone="success" />
+              <StatusRow label="等待用户" value="0" />
+              <StatusRow label="已完成" value="2" />
+            </div>
+          </PanelCard>
 
-        <PanelCard icon={GitBranch} title="当前分支">
-          <div className="flex items-center gap-1.5 font-mono text-[12px] text-foreground">
-            <GitBranch size={13} className="text-muted-foreground" />
-            <span>feat/auth-guard</span>
-          </div>
-          <div className="mt-1.5 flex items-center gap-3 text-[11px] text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              <FileDiff size={12} /> 5 文件
-            </span>
-            <span className="tabular-nums">+128 / -34</span>
-          </div>
-        </PanelCard>
-      </div>
-    </aside>
+          <PanelCard icon={GitBranch} title="当前分支">
+            <div className="flex items-center gap-1.5 font-mono text-[12px] text-foreground">
+              <GitBranch size={13} className="text-muted-foreground" />
+              <span>feat/auth-guard</span>
+            </div>
+            <div className="mt-1.5 flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <FileDiff size={12} /> 5 文件
+              </span>
+              <span className="tabular-nums">+128 / -34</span>
+            </div>
+          </PanelCard>
+        </div>
+      </aside>
     </>
   )
 }

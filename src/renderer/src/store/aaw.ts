@@ -160,7 +160,11 @@ export function nodesOfPhase(phase: AawPhase): readonly AawNode[] {
 }
 
 /** Overall progress as [completed, total]. */
-export function pipelineProgress(): { completed: number; total: number; running: boolean } {
+export function pipelineProgress(): {
+  completed: number
+  total: number
+  running: boolean
+} {
   const total = AAW_NODES.length
   const completed = AAW_NODES.filter((n) => n.status === 'completed').length
   const running = AAW_NODES.some((n) => n.status === 'running')

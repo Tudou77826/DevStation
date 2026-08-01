@@ -1,0 +1,94 @@
+// RPC protocol types shared by Main (dispatcher) and Renderer (caller).
+//
+// The dispatcher exposes ONE ipc channel ('rpc') and routes by method name.
+// RpcMethodMap is the single source of truth: every whitelisted method name
+// maps to its Zod-typed params and TS result type, so callers get static typing
+// and the dispatcher only accepts registered methods.
+import type { Project, Session, Task, TaskStatus } from './domain'
+
+export type RpcErrorCode =
+  | 'VALIDATION'
+  | 'FORBIDDEN'
+  | 'NOT_FOUND'
+  | 'CONFLICT'
+  | 'PROJECT_IN_USE'
+  | 'INVALID_PATH'
+  | 'NOT_GIT_REPOSITORY'
+  | 'INTERNAL'
+
+export interface RpcError {
+  code: RpcErrorCode
+  /** safe to show in the UI; never contains SQL/paths/stack */
+  message: string
+}
+
+export type RpcResponse<T> = { ok: true; result: T } | { ok: false; error: RpcError }
+
+// ── Param shapes (also enforced by Zod schemas in src/main/rpc/methods.ts) ────
+
+export interface TasksListParams {
+  status?: TaskStatus
+  projectId?: string
+  keyword?: string
+}
+export interface TasksCreateParams {
+  title: string
+  description?: string
+}
+export interface TasksUpdateParams {
+  id: string
+  title?: string
+  description?: string
+  status?: TaskStatus
+}
+export interface IdParam {
+  id: string
+}
+export interface TasksSetPinnedParams {
+  id: string
+  pinned: boolean
+}
+export interface TasksSetProjectParams {
+  id: string
+  /** undefined / null clears the association */
+  projectId?: string | null
+}
+export interface ProjectsCreateParams {
+  name: string
+  path: string
+}
+export interface TaskIdParam {
+  taskId: string
+}
+export interface ProjectIdParam {
+  projectId: string
+}
+
+// ── The whitelist map: method name → { params, result } ──────────────────────
+
+export interface RpcMethodMap {
+  'tasks.list': { params: TasksListParams; result: Task[] }
+  'tasks.create': { params: TasksCreateParams; result: Task }
+  'tasks.update': { params: TasksUpdateParams; result: Task }
+  'tasks.setPinned': { params: TasksSetPinnedParams; result: Task }
+  'tasks.touch': { params: IdParam; result: Task }
+  'tasks.delete': { params: IdParam; result: { ok: true } }
+  'tasks.setProject': { params: TasksSetProjectParams; result: Task }
+
+  'projects.pickDirectory': {
+    params: Record<string, never>
+    result: { path: string } | null
+  }
+  'projects.list': { params: Record<string, never>; result: Project[] }
+  'projects.create': { params: ProjectsCreateParams; result: Project }
+  'projects.delete': { params: IdParam; result: { ok: true } }
+
+  'sessions.createFromTask': { params: TaskIdParam; result: Session }
+  'sessions.listByTask': { params: TaskIdParam; result: Session[] }
+  'sessions.listByProject': { params: ProjectIdParam; result: Session[] }
+  'sessions.touch': { params: IdParam; result: Session }
+}
+
+export type RpcMethodName = keyof RpcMethodMap
+export type RpcParams<M extends RpcMethodName> = RpcMethodMap[M]['params']
+export type RpcResult<M extends RpcMethodName> = RpcMethodMap[M]['result']

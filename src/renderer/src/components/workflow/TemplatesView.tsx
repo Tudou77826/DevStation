@@ -48,7 +48,8 @@ export function TemplatesView(): React.ReactElement {
     <div>
       <h1 className="text-[20px] font-semibold text-foreground">工作流模板</h1>
       <p className="mt-2 text-[13px] text-muted-foreground">
-        不同研发场景对应不同的 AAW 阶段组合。阶段 1 仅展示模板;后续阶段可基于模板创建工作流。
+        不同研发场景对应不同的 AAW 阶段组合。阶段 1
+        仅展示模板;后续阶段可基于模板创建工作流。
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-3">
@@ -67,7 +68,9 @@ function TemplateCard({ template }: { template: Template }): React.ReactElement 
         <template.icon size={18} className="text-muted-foreground" strokeWidth={1.75} />
         <span className="text-[13px] font-medium text-foreground">{template.title}</span>
       </div>
-      <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">{template.desc}</p>
+      <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+        {template.desc}
+      </p>
 
       {/* which phases this template passes through */}
       <div className="mt-3 flex flex-wrap gap-1">

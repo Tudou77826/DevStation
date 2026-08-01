@@ -1,5 +1,6 @@
-import { MessageSquare, GitCommitHorizontal, TerminalSquare, FileCode } from 'lucide-react'
+import { MessageSquare, GitCommitHorizontal, FileCode } from 'lucide-react'
 import type { WorkAreaTab } from '@shared/types'
+import { TerminalPane } from '../terminal/TerminalPane'
 
 // Each pane is a Stage-1 placeholder: empty state + a (toggleable) loading
 // state. Real content lands in Stage 3 (terminal), Stage 5 (changes/files).
@@ -26,16 +27,31 @@ function EmptyState({
 }
 
 function ConversationPane(): React.ReactElement {
-  return <EmptyState icon={MessageSquare} title="还没有对话" hint="在下方输入框向 Agent 发送第一条指令" />
+  return (
+    <EmptyState
+      icon={MessageSquare}
+      title="还没有对话"
+      hint="在下方输入框向 Agent 发送第一条指令"
+    />
+  )
 }
 function ChangesPane(): React.ReactElement {
-  return <EmptyState icon={GitCommitHorizontal} title="暂无文件变更" hint="Agent 修改文件后，变更将出现在这里" />
-}
-function TerminalPane(): React.ReactElement {
-  return <EmptyState icon={TerminalSquare} title="终端未启动" hint="阶段 3 将在此处嵌入本地终端" />
+  return (
+    <EmptyState
+      icon={GitCommitHorizontal}
+      title="暂无文件变更"
+      hint="Agent 修改文件后，变更将出现在这里"
+    />
+  )
 }
 function FilesPane(): React.ReactElement {
-  return <EmptyState icon={FileCode} title="暂无可预览文件" hint="选择变更中的文件以查看 Diff（阶段 5）" />
+  return (
+    <EmptyState
+      icon={FileCode}
+      title="暂无可预览文件"
+      hint="选择变更中的文件以查看 Diff（阶段 5）"
+    />
+  )
 }
 
 export function WorkPane({ tab }: { tab: WorkAreaTab }): React.ReactElement {

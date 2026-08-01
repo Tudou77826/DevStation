@@ -18,9 +18,24 @@ function useEntries(): readonly MenuEntry[] {
   const openSettings = useUIStore((s) => s.openSettings)
   const activeSection = useNavStore((s) => s.activeSection)
   return [
-    { id: 'profile', label: '个人信息', icon: User, onSelect: () => openSettings(activeSection, 'appearance') },
-    { id: 'agent-settings', label: 'Agent 设置', icon: Bot, onSelect: () => openSettings(activeSection, 'general') },
-    { id: 'app-settings', label: '应用设置', icon: Settings, onSelect: () => openSettings(activeSection, 'appearance') },
+    {
+      id: 'profile',
+      label: '个人信息',
+      icon: User,
+      onSelect: () => openSettings(activeSection, 'appearance')
+    },
+    {
+      id: 'agent-settings',
+      label: 'Agent 设置',
+      icon: Bot,
+      onSelect: () => openSettings(activeSection, 'general')
+    },
+    {
+      id: 'app-settings',
+      label: '应用设置',
+      icon: Settings,
+      onSelect: () => openSettings(activeSection, 'appearance')
+    },
     { id: 'logout', label: '退出登录', icon: LogOut, onSelect: () => {} }
   ]
 }
@@ -92,11 +107,16 @@ export function UserMenu(): React.ReactElement {
         </span>
         <span className="min-w-0 flex-1 text-left">
           <span className="block truncate font-medium text-sidebar-foreground">李工</span>
-          <span className="block truncate text-[11px] text-muted-foreground">本地账号</span>
+          <span className="block truncate text-[11px] text-muted-foreground">
+            本地账号
+          </span>
         </span>
         <ChevronUp
           size={15}
-          className={cn('shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')}
+          className={cn(
+            'shrink-0 text-muted-foreground transition-transform',
+            open && 'rotate-180'
+          )}
         />
       </button>
     </div>

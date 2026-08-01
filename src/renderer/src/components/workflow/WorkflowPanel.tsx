@@ -48,7 +48,9 @@ export function WorkflowPanel(): React.ReactElement {
             ) : (
               <>
                 <CheckCircle2 size={13} className="text-status-success" />
-                <span className="text-muted-foreground">{progress.completed}/{progress.total}</span>
+                <span className="text-muted-foreground">
+                  {progress.completed}/{progress.total}
+                </span>
               </>
             )}
           </span>
