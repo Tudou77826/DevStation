@@ -1,92 +1,180 @@
-import { useMemo } from 'react'
-import { Plus, GitBranch, Inbox, Search } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  MOCK_TASKS,
-  useNavStore,
-  type Task,
-  type TaskStatus
-} from '@/store/nav'
+  AlertCircle,
+  CalendarClock,
+  FolderGit2,
+  Inbox,
+  Pin,
+  Plus,
+  Search
+} from 'lucide-react'
+import { useNavStore } from '@/store/nav'
+import { useDataStore } from '@/store/data'
+import type { Task } from '@shared/domain'
 import { cn } from '@/lib/utils'
+import { TaskDetailView } from './TaskDetailView'
+import { STATUS_META } from './task-meta'
 
-const STATUS_META: Record<TaskStatus, { label: string; tone: string }> = {
-  todo: { label: '待处理', tone: 'bg-muted-foreground/30 text-muted-foreground' },
-  'in-progress': { label: '进行中', tone: 'bg-status-warning/15 text-status-warning' },
-  done: { label: '已完成', tone: 'bg-status-success/15 text-status-success' }
-}
-
-/**
- * 任务面板 center view: a task list on the left + a detail pane on the right.
- * The list filters by the active secondary nav id (全部 / 进行中 / 已完成).
- */
 export function TaskPanel(): React.ReactElement {
   const filter = useNavStore((s) => s.activeSecondaryId.tasks)
   const selectedId = useNavStore((s) => s.selectedTaskId)
   const selectTask = useNavStore((s) => s.selectTask)
 
-  const tasks = useMemo(() => {
-    if (filter === 'in-progress') return MOCK_TASKS.filter((t) => t.status === 'in-progress')
-    if (filter === 'done') return MOCK_TASKS.filter((t) => t.status === 'done')
-    return MOCK_TASKS
-  }, [filter])
+  const tasks = useDataStore((s) => s.tasks)
+  const projects = useDataStore((s) => s.projects)
+  const loadTasks = useDataStore((s) => s.loadTasks)
+  const createTask = useDataStore((s) => s.createTask)
+  const touchTask = useDataStore((s) => s.touchTask)
+  const loading = useDataStore((s) => s.loading)
+  const error = useDataStore((s) => s.error)
 
-  const selected = MOCK_TASKS.find((t) => t.id === selectedId) ?? null
+  const [keyword, setKeyword] = useState('')
+  const [creating, setCreating] = useState(false)
+
+  useEffect(() => {
+    void loadTasks()
+  }, [loadTasks])
+
+  const filtered = useMemo(() => {
+    const byStatus =
+      filter === 'in-progress'
+        ? tasks.filter((task) => task.status === 'in-progress')
+        : filter === 'done'
+          ? tasks.filter((task) => task.status === 'done')
+          : tasks
+    const normalizedKeyword = keyword.trim().toLocaleLowerCase()
+    if (normalizedKeyword === '') return byStatus
+    return byStatus.filter(
+      (task) =>
+        task.title.toLocaleLowerCase().includes(normalizedKeyword) ||
+        task.description.toLocaleLowerCase().includes(normalizedKeyword)
+    )
+  }, [tasks, filter, keyword])
+
+  async function handleCreate(): Promise<void> {
+    setCreating(true)
+    try {
+      const task = await createTask('新任务')
+      if (task !== null) selectTask(task.id)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  function handleSelect(id: string): void {
+    selectTask(id)
+    void touchTask(id)
+  }
+
+  const filterLabel =
+    filter === 'in-progress' ? '进行中' : filter === 'done' ? '已完成' : '全部任务'
+  const selected = tasks.find((task) => task.id === selectedId) ?? null
+
+  if (selected !== null) {
+    return (
+      <section
+        className="flex min-h-0 flex-1 flex-col bg-background"
+        aria-label="任务工作区"
+      >
+        <TaskDetailView
+          key={selected.id}
+          task={selected}
+          onBack={() => selectTask(null)}
+        />
+      </section>
+    )
+  }
 
   return (
-    <div className="flex min-h-0 flex-1">
-      {/* Task list */}
-      <div className="flex w-72 shrink-0 flex-col border-r border-border">
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+    <section
+      className="flex min-h-0 flex-1 flex-col bg-background"
+      aria-label="任务工作区"
+    >
+      <header className="flex shrink-0 items-center justify-between gap-4 border-b border-border px-6 py-4">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            任务
+          </p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <h1 className="text-[20px] font-semibold tracking-tight text-foreground">
+              {filterLabel}
+            </h1>
+            <span className="text-[12px] tabular-nums text-muted-foreground">
+              {filtered.length}
+            </span>
+          </div>
+        </div>
+        <button
+          type="button"
+          title="新建任务"
+          onClick={() => void handleCreate()}
+          disabled={creating}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          <Plus size={14} />
+          新建任务
+        </button>
+      </header>
+
+      <div className="shrink-0 border-b border-border px-6 py-3">
+        <label className="flex h-8 max-w-sm items-center gap-2 rounded-md border border-border bg-card px-2.5 focus-within:ring-1 focus-within:ring-ring">
           <Search size={14} className="text-muted-foreground" />
           <input
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
             placeholder="搜索任务…"
-            className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground focus:outline-none"
           />
-          <button
-            type="button"
-            title="新建任务"
-            className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground hover:opacity-90"
-          >
-            <Plus size={15} />
-          </button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-2">
-          {tasks.length === 0 ? (
-            <EmptyHint text="该筛选下暂无任务" />
-          ) : (
-            <div className="space-y-1">
-              {tasks.map((task) => (
+        </label>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+        {error !== null && (
+          <div className="mb-3 flex items-center gap-1.5 rounded-md bg-status-error/10 px-3 py-2 text-[12px] text-status-error">
+            <AlertCircle size={13} /> {error}
+          </div>
+        )}
+        {loading && tasks.length === 0 ? (
+          <Hint text="加载中…" />
+        ) : filtered.length === 0 ? (
+          <Hint text={keyword !== '' ? '没有匹配的任务' : '该筛选下暂无任务'} />
+        ) : (
+          <div className="mx-auto max-w-5xl overflow-hidden rounded-xl border border-border bg-card">
+            <div className="grid grid-cols-[minmax(240px,1fr)_160px_110px_120px] gap-4 border-b border-border bg-muted/35 px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              <span>任务</span>
+              <span>项目</span>
+              <span>状态</span>
+              <span className="text-right">更新</span>
+            </div>
+            <div className="divide-y divide-border">
+              {filtered.map((task) => (
                 <TaskRow
                   key={task.id}
                   task={task}
+                  projectName={
+                    projects.find((project) => project.id === task.projectId)?.name ??
+                    null
+                  }
                   active={task.id === selectedId}
-                  onClick={() => selectTask(task.id)}
+                  onClick={() => handleSelect(task.id)}
                 />
               ))}
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Task detail */}
-      <div className="min-w-0 flex-1 overflow-y-auto">
-        {selected === null ? (
-          <div className="flex h-full items-center justify-center">
-            <EmptyHint text="选择左侧任务查看详情" />
           </div>
-        ) : (
-          <TaskDetail task={selected} />
         )}
       </div>
-    </div>
+    </section>
   )
 }
 
 function TaskRow({
   task,
+  projectName,
   active,
   onClick
 }: {
   task: Task
+  projectName: string | null
   active: boolean
   onClick: () => void
 }): React.ReactElement {
@@ -97,81 +185,65 @@ function TaskRow({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'w-full rounded-lg px-3 py-2.5 text-left transition-colors',
-        active ? 'bg-accent' : 'hover:bg-accent/50'
+        'grid w-full grid-cols-[minmax(240px,1fr)_160px_110px_120px] items-center gap-4 px-4 py-3 text-left transition-colors',
+        active ? 'bg-accent' : 'hover:bg-accent/45'
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-[13px] font-medium leading-snug text-foreground">
-          {task.title}
+      <span className="flex min-w-0 items-center gap-2.5">
+        <span
+          className={cn(
+            'h-2 w-2 shrink-0 rounded-full',
+            task.status === 'done'
+              ? 'bg-status-success'
+              : task.status === 'in-progress'
+                ? 'bg-status-warning'
+                : 'bg-muted-foreground/45'
+          )}
+        />
+        <span className="min-w-0">
+          <span className="flex items-center gap-1.5">
+            {task.pinned && <Pin size={11} className="shrink-0 text-muted-foreground" />}
+            <span className="truncate text-[13px] font-medium text-foreground">
+              {task.title}
+            </span>
+          </span>
+          {task.description !== '' && (
+            <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
+              {task.description}
+            </span>
+          )}
         </span>
-        <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium', meta.tone)}>
+      </span>
+      <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+        <FolderGit2 size={12} className="shrink-0" />
+        <span className="truncate">{projectName ?? '未关联'}</span>
+      </span>
+      <span>
+        <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', meta.tone)}>
           {meta.label}
         </span>
-      </div>
-      <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-        <GitBranch size={11} />
-        <span className="truncate font-mono">{task.branch}</span>
-        <span className="text-muted-foreground/40">·</span>
-        <span className="truncate">{task.project}</span>
-      </div>
+      </span>
+      <span className="flex items-center justify-end gap-1.5 text-[11px] tabular-nums text-muted-foreground">
+        <CalendarClock size={12} />
+        {relativeTime(task.updatedAt)}
+      </span>
     </button>
   )
 }
 
-function TaskDetail({ task }: { task: Task }): React.ReactElement {
-  const meta = STATUS_META[task.status]
-  return (
-    <div className="mx-auto max-w-3xl px-8 py-6">
-      <span className={cn('inline-block rounded px-2 py-0.5 text-[11px] font-medium', meta.tone)}>
-        {meta.label}
-      </span>
-      <h1 className="mt-3 text-[20px] font-semibold leading-tight text-foreground">
-        {task.title}
-      </h1>
-
-      <dl className="mt-6 grid grid-cols-2 gap-4 text-[13px]">
-        <Field label="关联项目" value={task.project} />
-        <Field label="分支" value={task.branch} mono />
-        <Field label="最后更新" value={task.updatedAt} />
-        <Field label="任务 ID" value={task.id} mono />
-      </dl>
-
-      <section className="mt-8">
-        <h2 className="mb-2 text-[12px] font-medium uppercase tracking-wider text-muted-foreground">
-          描述
-        </h2>
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
-          阶段 1 占位内容。阶段 2 将从 SQLite 读取任务描述、验收标准与关联的工作会话。
-        </p>
-      </section>
-    </div>
-  )
+function relativeTime(timestamp: number): string {
+  const minutes = Math.floor((Date.now() - timestamp) / 60_000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+  return `${Math.floor(hours / 24)} 天前`
 }
 
-function Field({
-  label,
-  value,
-  mono
-}: {
-  label: string
-  value: string
-  mono?: boolean
-}): React.ReactElement {
+function Hint({ text }: { text: string }): React.ReactElement {
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2.5">
-      <dt className="text-[11px] text-muted-foreground">{label}</dt>
-      <dd className={cn('mt-1 truncate text-foreground', mono && 'font-mono text-[12px]')}>
-        {value}
-      </dd>
-    </div>
-  )
-}
-
-function EmptyHint({ text }: { text: string }): React.ReactElement {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center text-muted-foreground">
-      <Inbox size={22} strokeWidth={1.5} />
+    <div className="flex h-full min-h-64 flex-col items-center justify-center gap-2 text-center text-muted-foreground">
+      <Inbox size={24} strokeWidth={1.4} />
       <span className="text-[12px]">{text}</span>
     </div>
   )

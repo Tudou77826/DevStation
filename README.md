@@ -1,41 +1,36 @@
 # DevStation
 
-本地 AI 辅助研发桌面应用。验证一条本地研发链路：
+DevStation 是面向 AI 辅助研发的本地桌面工作台。MVP 以一条顺畅的本地研发链路为目标：
 
-```
-手动建任务 → 关联本地 Git 项目 → 建 Agent 会话 → 终端跑 CLI Agent
-→ Hook 跟踪状态 → 查看 Diff → 人工提交
-```
-
-技术栈：Electron + React 19 + TypeScript + Vite (electron-vite) + Tailwind v4。
-
-## 分层
-
-```
-src/
-├── main/        Electron 主进程（窗口、系统、安全边界）
-├── preload/     隔离世界的白名单 API 桥
-├── renderer/    React UI（任务 / 会话 / Diff / 终端视图）
-│   └── src/
-│       ├── components/   sidebar / workarea / rightpanel
-│       ├── store/        zustand 状态
-│       └── assets/       全局样式与主题 token
-└── shared/      跨层共享类型
+```text
+创建任务 → 关联 Git 项目 → 创建工作会话 → 运行 CLI Agent → 跟踪状态 → 评审 Diff
 ```
 
-Renderer 运行在沙箱中，不直接访问 Node.js，所有系统能力经由 Preload 白名单 API。
+当前已完成任务、项目、会话的本地持久化，具备基础 Shell/Codex 终端和质量门禁；Agent Hook、会话恢复和 Diff 仍在后续计划中。
 
-## 开发
+技术栈：Electron、React、TypeScript、electron-vite、SQLite、xterm.js、node-pty。
+
+## 开始开发
 
 ```bash
 npm install
-npm run dev          # 启动 electron-vite 开发模式
-npm run typecheck    # 类型检查（node + web）
-npm run build        # 构建产物
-npm run build:win    # 打包 Windows 安装包
+npm run dev
+npm run verify:fast
 ```
 
-## 致谢
+合并前运行 `npm run verify:pr`；完整命令和测试原则见[测试体系](./docs/TESTING.md)。
 
-终端与 Git Diff 的运行机制参考自 [Orca](https://github.com/stablyai/orca)（MIT License）。
-相关代码以独立模块方式抽取，保留其原始许可证与版权声明。
+## 继续阅读
+
+| 需要了解                   | 文档                           |
+| -------------------------- | ------------------------------ |
+| 当前能力、结构、限制和风险 | [当前状态](./docs/STATUS.md)   |
+| 某项能力对应的代码和测试   | [代码地图](./docs/CODE_MAP.md) |
+| 测试原则和质量门禁         | [测试体系](./docs/TESTING.md)  |
+| 尚未完成的 MVP 工作        | [实施计划](./docs/PLAN.md)     |
+
+AI Agent 应先阅读 [AGENTS.md](./AGENTS.md)。代码、测试、Schema 和配置是实现事实的唯一来源。
+
+## 许可证
+
+产品视觉和交互参考了 [Orca](https://github.com/stablyai/orca)（MIT License）。当前终端为独立实现；版权边界见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。

@@ -28,7 +28,12 @@ function GateBranches(): React.ReactElement {
             strokeDasharray="3 2.5"
             fill="none"
           />
-          <path d="M-2 10 L 1 13 L 4 10" stroke="currentColor" strokeWidth="1.2" fill="none" />
+          <path
+            d="M-2 10 L 1 13 L 4 10"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            fill="none"
+          />
         </svg>
         Fail / Blocked → 回到详细设计原地修正
       </span>
@@ -59,9 +64,20 @@ function Swimlane({ phase }: { phase: AawPhase }): React.ReactElement {
   )
 }
 
-function RowItem({ node, isLast }: { node: AawNode; isLast: boolean }): React.ReactElement {
+function RowItem({
+  node,
+  isLast
+}: {
+  node: AawNode
+  isLast: boolean
+}): React.ReactElement {
   // Connector tone follows the upstream node's status.
-  const tone = node.status === 'completed' ? 'success' : node.status === 'running' ? 'active' : 'muted'
+  const tone =
+    node.status === 'completed'
+      ? 'success'
+      : node.status === 'running'
+        ? 'active'
+        : 'muted'
   return (
     <>
       {isLast ? null : <NodeConnector tone={tone} />}

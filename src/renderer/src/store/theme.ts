@@ -14,7 +14,7 @@ const MEDIA_QUERY = '(prefers-color-scheme: dark)'
 function readStoredChoice(): ThemeChoice {
   const v = localStorage.getItem(STORAGE_KEY)
   if (v === 'light' || v === 'dark' || v === 'system') return v
-  return 'dark' // dark-first per MVP plan
+  return 'dark' // DevStation is dark-first by default.
 }
 
 function systemPrefersDark(): boolean {
@@ -34,8 +34,11 @@ function applyToDocument(theme: ResolvedTheme): void {
 // Notify the main process so the native window chrome (background + caption
 // buttons) follows the app theme. No-op outside Electron (web preview).
 function pushToMain(theme: ResolvedTheme): void {
-  const api = (window as unknown as { devstation?: { theme?: { update?: (t: ResolvedTheme) => unknown } } })
-    .devstation?.theme?.update
+  const api = (
+    window as unknown as {
+      devstation?: { theme?: { update?: (t: ResolvedTheme) => unknown } }
+    }
+  ).devstation?.theme?.update
   if (typeof api === 'function') {
     try {
       void api(theme)

@@ -33,7 +33,9 @@ export function SettingsSection({
             )}
           </h2>
           {description !== undefined && (
-            <p className="max-w-3xl text-[13px] leading-6 text-muted-foreground">{description}</p>
+            <p className="max-w-3xl text-[13px] leading-6 text-muted-foreground">
+              {description}
+            </p>
           )}
         </div>
       </div>

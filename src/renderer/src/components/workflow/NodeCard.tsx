@@ -72,7 +72,11 @@ export function NodeCard({ node }: { node: AawNode }): React.ReactElement {
       {/* title */}
       <div className="mt-2 flex items-center gap-1.5">
         {GateIcon !== null && (
-          <GateIcon size={14} className="shrink-0 text-muted-foreground" strokeWidth={1.75} />
+          <GateIcon
+            size={14}
+            className="shrink-0 text-muted-foreground"
+            strokeWidth={1.75}
+          />
         )}
         <span className="text-[13px] font-medium leading-tight text-foreground">
           {node.label}

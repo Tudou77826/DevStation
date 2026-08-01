@@ -5,9 +5,12 @@
   "directories": {
     "output": "release"
   },
+  "npmRebuild": false,
+  "asarUnpack": ["node_modules/node-pty/**/*"],
   "files": ["out/**/*", "package.json"],
   "win": {
     "target": ["nsis"],
+    "signAndEditExecutable": false,
     "artifactName": "${productName}-${version}-${arch}.${ext}"
   },
   "nsis": {

@@ -68,20 +68,12 @@ export function AppearancePane(): React.ReactElement {
 }
 
 function SettingsSubHeader({ title }: { title: string }): React.ReactElement {
-  return (
-    <h3 className="pt-4 text-[13px] font-semibold text-foreground">
-      {title}
-    </h3>
-  )
+  return <h3 className="pt-4 text-[13px] font-semibold text-foreground">{title}</h3>
 }
 
 export function GeneralPane(): React.ReactElement {
   return (
-    <SettingsSection
-      id="general"
-      title="通用"
-      description="应用的基础行为与默认值。"
-    >
+    <SettingsSection id="general" title="通用" description="应用的基础行为与默认值。">
       <SettingsRow
         label="启动时恢复上次会话"
         description="重新打开 DevStation 时，自动定位到上次使用的任务与工作会话。"
@@ -95,7 +87,9 @@ export function GeneralPane(): React.ReactElement {
       <SettingsRow
         label="发送匿名使用统计"
         description="帮助我们改进 DevStation。不包含任何代码或敏感数据。"
-        control={<SettingsSwitch checked={false} onChange={() => {}} ariaLabel="使用统计" />}
+        control={
+          <SettingsSwitch checked={false} onChange={() => {}} ariaLabel="使用统计" />
+        }
       />
     </SettingsSection>
   )
@@ -157,8 +151,8 @@ export function AboutPane(): React.ReactElement {
         </div>
       </div>
       <p className="max-w-xl py-2 text-[13px] leading-relaxed text-muted-foreground">
-        本地 AI 辅助研发桌面应用。验证一条本地研发链路：手动建任务 → 关联 Git 项目 →
-        运行 CLI Agent → 跟踪状态 → 查看 Diff → 人工提交。
+        本地 AI 辅助研发桌面应用。验证一条本地研发链路：手动建任务 → 关联 Git 项目 → 运行
+        CLI Agent → 跟踪状态 → 查看 Diff → 人工提交。
       </p>
       <div className="py-2">
         <a
