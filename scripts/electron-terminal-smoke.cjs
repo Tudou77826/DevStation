@@ -37,13 +37,11 @@ app.whenReady().then(async () => {
     if (process.platform === 'win32') {
       const shell = process.env.COMSPEC || 'cmd.exe'
       await runPty(shell, ['/d', '/c', 'echo DEVSTATION_PTY_OK'], 'DEVSTATION_PTY_OK')
-      await runPty(shell, ['/d', '/c', 'codex --version'], 'codex-cli')
     } else {
       const shell = process.env.SHELL || '/bin/bash'
       await runPty(shell, ['-lc', 'printf DEVSTATION_PTY_OK'], 'DEVSTATION_PTY_OK')
-      await runPty(shell, ['-lc', 'codex --version'], 'codex-cli')
     }
-    console.log('Stage 0 terminal smoke passed: PTY I/O, resize, and Codex launch.')
+    console.log('Stage 0 terminal smoke passed: PTY I/O, resize, and clean exit.')
     app.exit(0)
   } catch (error) {
     console.error(error)

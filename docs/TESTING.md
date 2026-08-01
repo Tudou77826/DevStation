@@ -17,15 +17,15 @@
 
 ## 防护分层
 
-| 层级         | 保护内容                    | 工具                         |
-| ------------ | --------------------------- | ---------------------------- |
-| 静态质量     | 类型、Lint、格式            | TypeScript、Oxlint、Prettier |
-| 架构         | 循环、反向和跨层依赖        | dependency-cruiser           |
-| 单元与组件   | 领域规则、状态、React 交互  | Vitest、Testing Library      |
-| 集成         | SQLite、RPC、Git、文件系统  | Vitest、临时目录、真实 Git   |
-| Electron E2E | 用户黄金链路和跨进程接线    | Playwright Electron          |
-| 原生冒烟     | PTY I/O、resize、Codex 启动 | Electron、node-pty           |
-| 供应链与交付 | 依赖、许可证、漏洞、安装包  | npm、electron-builder        |
+| 层级         | 保护内容                   | 工具                         |
+| ------------ | -------------------------- | ---------------------------- |
+| 静态质量     | 类型、Lint、格式           | TypeScript、Oxlint、Prettier |
+| 架构         | 循环、反向和跨层依赖       | dependency-cruiser           |
+| 单元与组件   | 领域规则、状态、React 交互 | Vitest、Testing Library      |
+| 集成         | SQLite、RPC、Git、文件系统 | Vitest、临时目录、真实 Git   |
+| Electron E2E | 用户黄金链路和跨进程接线   | Playwright Electron          |
+| 原生冒烟     | PTY I/O、resize、进程退出  | Electron、node-pty           |
+| 供应链与交付 | 依赖、许可证、漏洞、安装包 | npm、electron-builder        |
 
 ## 重点契约
 
@@ -44,7 +44,7 @@
 
 ```bash
 npm run verify:fast      # 类型、Lint、格式、架构、单元和组件测试
-npm run verify:pr        # fast + 覆盖率 + Electron E2E + PTY/Codex 冒烟
+npm run verify:pr        # fast + 覆盖率 + Electron E2E + PTY 冒烟
 npm run verify:nightly   # PR + 依赖、许可证、漏洞和 Windows 安装包
 ```
 
