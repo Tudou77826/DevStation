@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ArrowUp, Paperclip } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// Fixed at the bottom of the center work area (per MVP plan §4).
+// Fixed at the bottom of the center work area.
 // Stage 1: visual only; submission just clears the input.
 export function ChatComposer(): React.ReactElement {
   const [value, setValue] = useState('')

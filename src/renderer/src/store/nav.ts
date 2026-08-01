@@ -1,7 +1,6 @@
 // Navigation model for the left sidebar and the center work area.
-// Stage 1 uses mock data only; Stage 2 swaps this for SQLite-backed state.
 //
-// Key rule (MVP plan §4): the CENTER WORK AREA must change with the active
+// Key rule: the CENTER WORK AREA must change with the active
 // primary section. The 4 tabs (对话/变更/终端/文件) belong ONLY to the
 // AI Space session view; 任务面板 shows a task list; 工作流 shows a placeholder.
 import { create } from 'zustand'

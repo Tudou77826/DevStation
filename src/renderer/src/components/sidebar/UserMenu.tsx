@@ -11,8 +11,8 @@ interface MenuEntry {
   onSelect: () => void
 }
 
-// Menu expands upward (per MVP plan §4: user entry pinned at bottom-left,
-// fan-out goes up). '应用设置' opens the full-page settings view, recording
+// Menu expands upward from the user entry pinned at bottom-left.
+// '应用设置' opens the full-page settings view, recording
 // the current nav section so the Back button returns here.
 function useEntries(): readonly MenuEntry[] {
   const openSettings = useUIStore((s) => s.openSettings)

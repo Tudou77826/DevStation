@@ -28,7 +28,7 @@ function TitleBarStrip(): React.ReactElement {
 // Three-column Codex-style shell:
 //   [sidebar rail + nav tree] | [center section view] | [right panel]
 //
-// Center view changes with the active primary section (MVP plan §4):
+// Center view changes with the active primary section:
 //   - 任务面板  → task list + detail
 //   - AI 空间   → work tabs (对话/变更/终端/文件) + bottom composer
 //   - 工作流    → fixed flow placeholder

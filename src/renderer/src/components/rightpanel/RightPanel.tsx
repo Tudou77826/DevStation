@@ -4,7 +4,7 @@ import { useNavStore } from '@/store/nav'
 import { cn } from '@/lib/utils'
 
 // Right panel shows task summary, agent status and code-change summary.
-// Collapsible (per MVP plan §4). Stage 1 = placeholder structure.
+// Collapsible contextual panel. Current contents are placeholders.
 export function RightPanel(): React.ReactElement {
   const toggle = useNavStore((s) => s.toggleRightPanel)
   const width = useNavStore((s) => s.rightPanelWidth)

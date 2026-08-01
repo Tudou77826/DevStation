@@ -14,7 +14,7 @@ const MEDIA_QUERY = '(prefers-color-scheme: dark)'
 function readStoredChoice(): ThemeChoice {
   const v = localStorage.getItem(STORAGE_KEY)
   if (v === 'light' || v === 'dark' || v === 'system') return v
-  return 'dark' // dark-first per MVP plan
+  return 'dark' // DevStation is dark-first by default.
 }
 
 function systemPrefersDark(): boolean {
