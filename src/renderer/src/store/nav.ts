@@ -1,10 +1,10 @@
 // Navigation model for the left sidebar and the center work area.
 //
-// Key rule: the CENTER WORK AREA must change with the active
-// primary section. The 4 tabs (对话/变更/终端/文件) belong ONLY to the
-// AI Space session view; 任务面板 shows a task list; 工作流 shows a placeholder.
+// Key rule: primary navigation owns the secondary navigation, while the
+// center remains a single workspace. Details, files and changes belong to the
+// contextual right inspector rather than introducing another nested split.
 import { create } from 'zustand'
-import type { NavSection, WorkAreaTab } from '@shared/types'
+import type { NavSection } from '@shared/types'
 
 export interface NavPrimaryItem {
   id: NavSection
@@ -34,10 +34,7 @@ export const SECONDARY_NAV: Record<NavSection, readonly NavSecondaryItem[]> = {
     { id: 'in-progress', label: '进行中', icon: 'circle-dot' },
     { id: 'done', label: '已完成', icon: 'check-check' }
   ],
-  'ai-space': [
-    { id: 'projects', label: '项目', icon: 'folder-git-2' },
-    { id: 'sessions', label: '工作会话', icon: 'messages-square' }
-  ],
+  'ai-space': [],
   workflow: [
     { id: 'overview', label: '流程总览', icon: 'git-branch' },
     { id: 'templates', label: '模板', icon: 'layout-template' }
@@ -58,13 +55,17 @@ interface NavState {
   activeSecondaryId: Record<NavSection, string>
   sidebarCollapsed: boolean
 
-  /** AI Space session work tab (对话/变更/终端/文件) */
-  activeWorkTab: WorkAreaTab
-
   /** selected task id in 任务面板 */
   selectedTaskId: string | null
 
+  /** AI Space tree selection and expansion. Projects are the tree roots. */
+  selectedProjectId: string | null
+  selectedSessionId: string | null
+  expandedProjectIds: string[]
+
   rightPanelOpen: boolean
+  /** Files and changes are AI-session context tools, never center-work tabs. */
+  aiRightPanelView: 'changes' | 'files'
 
   /** resizable panel widths (px) */
   sidebarWidth: number
@@ -73,9 +74,14 @@ interface NavState {
   setSection: (section: NavSection) => void
   setSecondary: (id: string) => void
   toggleSidebar: () => void
-  setWorkTab: (tab: WorkAreaTab) => void
   selectTask: (id: string | null) => void
+  selectProject: (id: string | null) => void
+  selectSession: (id: string, projectId: string | null) => void
+  toggleProjectExpanded: (id: string) => void
   toggleRightPanel: () => void
+  openRightPanel: () => void
+  closeRightPanel: () => void
+  showAiRightPanel: (view: 'changes' | 'files') => void
   setSidebarWidth: (w: number) => void
   setRightPanelWidth: (w: number) => void
 }
@@ -88,9 +94,12 @@ export const useNavStore = create<NavState>((set) => ({
     workflow: 'overview'
   },
   sidebarCollapsed: false,
-  activeWorkTab: 'conversation',
   selectedTaskId: 't-1',
+  selectedProjectId: null,
+  selectedSessionId: null,
+  expandedProjectIds: [],
   rightPanelOpen: true,
+  aiRightPanelView: 'changes',
   sidebarWidth: 240,
   rightPanelWidth: 320,
 
@@ -100,9 +109,35 @@ export const useNavStore = create<NavState>((set) => ({
       activeSecondaryId: { ...s.activeSecondaryId, [s.activeSection]: id }
     })),
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-  setWorkTab: (tab) => set({ activeWorkTab: tab }),
   selectTask: (id) => set({ selectedTaskId: id }),
+  selectProject: (id) =>
+    set((state) => ({
+      selectedProjectId: id,
+      selectedSessionId: state.selectedProjectId === id ? state.selectedSessionId : null,
+      expandedProjectIds:
+        id !== null && !state.expandedProjectIds.includes(id)
+          ? [...state.expandedProjectIds, id]
+          : state.expandedProjectIds
+    })),
+  selectSession: (id, projectId) =>
+    set((state) => ({
+      selectedSessionId: id,
+      selectedProjectId: projectId,
+      expandedProjectIds:
+        projectId !== null && !state.expandedProjectIds.includes(projectId)
+          ? [...state.expandedProjectIds, projectId]
+          : state.expandedProjectIds
+    })),
+  toggleProjectExpanded: (id) =>
+    set((state) => ({
+      expandedProjectIds: state.expandedProjectIds.includes(id)
+        ? state.expandedProjectIds.filter((projectId) => projectId !== id)
+        : [...state.expandedProjectIds, id]
+    })),
   toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+  openRightPanel: () => set({ rightPanelOpen: true }),
+  closeRightPanel: () => set({ rightPanelOpen: false }),
+  showAiRightPanel: (view) => set({ aiRightPanelView: view, rightPanelOpen: true }),
   setSidebarWidth: (w) => set({ sidebarWidth: clamp(w, 200, 360) }),
   setRightPanelWidth: (w) => set({ rightPanelWidth: clamp(w, 260, 480) })
 }))

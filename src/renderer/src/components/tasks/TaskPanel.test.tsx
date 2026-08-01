@@ -32,7 +32,7 @@ const mocks = vi.hoisted(() => {
   }
   const nav = {
     activeSecondaryId: { tasks: 'all' },
-    selectedTaskId: task.id,
+    selectedTaskId: null as string | null,
     selectTask: vi.fn()
   }
   return { data, nav }
@@ -50,13 +50,14 @@ vi.mock('@/store/nav', () => ({
   useNavStore: (selector: (state: typeof mocks.nav) => unknown) => selector(mocks.nav)
 }))
 
-vi.mock('@/components/ai-space/SessionList', () => ({
-  SessionList: () => <div>会话列表</div>
+vi.mock('./TaskDetailView', () => ({
+  TaskDetailView: () => <div aria-label="主工作区任务详情" />
 }))
 
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  mocks.nav.selectedTaskId = null
 })
 
 describe('TaskPanel', () => {
@@ -76,15 +77,10 @@ describe('TaskPanel', () => {
     expect(mocks.data.touchTask).toHaveBeenCalledTimes(1)
   })
 
-  it('requires confirmation before deleting a task and its sessions', async () => {
+  it('renders the selected task detail in the center workspace', () => {
+    mocks.nav.selectedTaskId = 'task-1'
     render(<TaskPanel />)
-    fireEvent.click(screen.getByRole('button', { name: '删除任务' }))
-
-    expect(screen.getByRole('alertdialog', { name: '确认删除任务' })).toBeTruthy()
-    expect(mocks.data.deleteTask).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
-    await waitFor(() => expect(mocks.data.deleteTask).toHaveBeenCalledWith('task-1'))
-    expect(mocks.nav.selectTask).toHaveBeenCalledWith(null)
+    expect(screen.getByRole('region', { name: '任务工作区' })).toBeTruthy()
+    expect(screen.getByLabelText('主工作区任务详情')).toBeTruthy()
   })
 })

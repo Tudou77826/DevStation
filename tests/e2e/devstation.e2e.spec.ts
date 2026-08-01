@@ -107,10 +107,13 @@ test('项目被任务引用时不可删除，解除引用后可以删除', async
     const page = await app.firstWindow()
 
     await page.getByRole('button', { name: 'AI 空间' }).click()
-    await page.getByRole('button', { name: /^项目/ }).click()
-    await page.getByTitle('添加本地项目').click()
+    await page.getByRole('button', { name: '添加本地项目' }).click()
     try {
-      await expect(page.getByRole('heading', { name: 'DevStation' })).toBeVisible()
+      await expect(
+        page
+          .getByRole('region', { name: 'AI 空间工作区' })
+          .getByRole('heading', { name: 'DevStation' })
+      ).toBeVisible()
     } catch (error) {
       throw new Error(
         `添加项目失败，当前界面：\n${await page.locator('body').innerText()}`,
@@ -125,19 +128,47 @@ test('项目被任务引用时不可删除，解除引用后可以删除', async
     await page.getByLabel('关联项目').selectOption({ label: 'DevStation' })
 
     await page.getByRole('button', { name: 'AI 空间' }).click()
-    await page.getByRole('button', { name: /^项目/ }).click()
     page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: '移除项目 DevStation' }).click()
-    await expect(page.getByRole('heading', { name: 'DevStation' })).toBeVisible()
+    await expect(
+      page
+        .getByRole('region', { name: 'AI 空间工作区' })
+        .getByRole('heading', { name: 'DevStation' })
+    ).toBeVisible()
     await expect(page.getByText(/仍被任务或会话引用/)).toBeVisible()
 
     await page.getByRole('button', { name: '任务面板' }).click()
     await page.getByLabel('关联项目').selectOption('')
     await page.getByRole('button', { name: 'AI 空间' }).click()
-    await page.getByRole('button', { name: /^项目/ }).click()
     page.once('dialog', (dialog) => dialog.accept())
     await page.getByRole('button', { name: '移除项目 DevStation' }).click()
     await expect(page.getByRole('heading', { name: 'DevStation' })).toHaveCount(0)
+  } finally {
+    await closeQuietly(app)
+    await rm(profile, { recursive: true, force: true })
+  }
+})
+
+test('右侧栏可重新呼出，并跟随当前一级工作区', async () => {
+  const profile = await mkdtemp(join(tmpdir(), 'devstation-e2e-'))
+  let app: ElectronApplication | null = null
+
+  try {
+    app = await launch(profile)
+    const page = await app.firstWindow()
+    const inspector = page.getByRole('complementary', { name: '上下文侧栏' })
+
+    await expect(inspector).toContainText('附属信息')
+    await page.getByRole('button', { name: '收起右侧栏' }).click()
+    await expect(inspector).toHaveCount(0)
+    await page.getByRole('button', { name: '打开附属栏' }).click()
+    await expect(inspector).toContainText('附属信息')
+
+    await page.getByRole('button', { name: 'AI 空间' }).click()
+    await expect(inspector).toContainText('项目上下文')
+    await page.getByRole('button', { name: '收起右侧栏' }).click()
+    await page.getByRole('button', { name: '打开文件' }).click()
+    await expect(inspector).toContainText('项目上下文')
   } finally {
     await closeQuietly(app)
     await rm(profile, { recursive: true, force: true })

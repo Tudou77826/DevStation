@@ -3,7 +3,7 @@ import { Sidebar } from '@/components/sidebar/Sidebar'
 import { AISpaceWorkArea } from '@/components/workarea/AISpaceWorkArea'
 import { TaskPanel } from '@/components/tasks/TaskPanel'
 import { WorkflowPanel } from '@/components/workflow/WorkflowPanel'
-import { RightPanel } from '@/components/rightpanel/RightPanel'
+import { RightPanel, RightPanelDock } from '@/components/rightpanel/RightPanel'
 import { Settings } from '@/components/settings/Settings'
 import { useNavStore } from '@/store/nav'
 import { useUIStore } from '@/store/ui'
@@ -25,12 +25,12 @@ function TitleBarStrip(): React.ReactElement {
   )
 }
 
-// Three-column Codex-style shell:
-//   [sidebar rail + nav tree] | [center section view] | [right panel]
+// Codex-style shell:
+//   [primary rail + contextual tree] | [single center workspace] | [context inspector]
 //
 // Center view changes with the active primary section:
-//   - 任务面板  → task list + detail
-//   - AI 空间   → work tabs (对话/变更/终端/文件) + bottom composer
+//   - 任务面板  → list-to-detail navigation inside one center workspace
+//   - AI 空间   → one Agent stage; changes/files live in the inspector
 //   - 工作流    → fixed flow placeholder
 export default function App(): React.ReactElement {
   const section = useNavStore((s) => s.activeSection)
@@ -66,7 +66,7 @@ export default function App(): React.ReactElement {
           {section === 'workflow' && <WorkflowPanel />}
         </main>
 
-        {rightPanelOpen && <RightPanel />}
+        {rightPanelOpen ? <RightPanel /> : <RightPanelDock />}
       </div>
     </div>
   )
