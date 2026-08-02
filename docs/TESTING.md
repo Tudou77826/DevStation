@@ -13,6 +13,8 @@
 
 `test:terminal` 只验证真实 PTY，不绑定任何 Agent CLI，保证结果确定。Agent 适配通过固定命令契约、供应商数据适配测试和显式启用的本机 smoke 验证。
 
+`test:event-bridge` 单独启动 PowerShell 验证 Electron 关闭时的原子事件写入。它在 PR 门禁中串行执行，不进入普通单测和覆盖率并发池，避免外部进程冷启动挤占 SQLite 测试预算。
+
 `main` 只允许通过 Pull Request 合入，并要求 `pr-gate` 成功；Nightly 用于发现供应链和打包回归，不能替代合并门禁。`build:win` 只验证安装包构建，禁止隐式发布；版本发布使用独立的人工授权流程。
 
 ## 分层职责

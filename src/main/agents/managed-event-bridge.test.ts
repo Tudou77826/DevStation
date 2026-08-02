@@ -72,7 +72,10 @@ describe('ManagedEventBridge', () => {
     ).toThrow('Invalid eventId')
   })
 
-  it.skipIf(process.platform !== 'win32')(
+  it.skipIf(
+    process.platform !== 'win32' ||
+      process.env['npm_lifecycle_event'] !== 'test:event-bridge'
+  )(
     'writes an event through the standalone PowerShell bridge while Electron is absent',
     () => {
       const managed = bridge()
