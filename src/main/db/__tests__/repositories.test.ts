@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Database } from '../database'
 import { initializeDatabase } from '../schema'
-import { TaskRepo, ProjectRepo, SessionRepo } from '../repositories'
+import { AgentSettingsRepo, TaskRepo, ProjectRepo, SessionRepo } from '../repositories'
 import { RpcError } from '../../rpc/errors'
 import { tmpDbPath, withDb, withFileDb, seedProject } from './helpers'
 
@@ -254,6 +254,43 @@ describe('SessionRepo + cascade', () => {
       const touched = sessions.touch(s.id)
       expect(touched.lastOpenedAt).not.toBeNull()
       expect(touched.updatedAt).toBe(updated0)
+    })
+  })
+})
+
+describe('AgentSettingsRepo', () => {
+  it('provides safe defaults and persists independent runtime and integration choices', () => {
+    withDb((db) => {
+      const settings = new AgentSettingsRepo(db)
+      expect(settings.effective('opencode')).toMatchObject({
+        enabled: true,
+        integrationEnabled: true,
+        executablePath: null,
+        isDefault: true
+      })
+
+      settings.setExecutablePath('chrys', 'D:\\venv\\chrys.exe')
+      settings.setIntegrationEnabled('chrys', false)
+      settings.setDefault('chrys')
+      expect(settings.effective('chrys')).toMatchObject({
+        enabled: true,
+        integrationEnabled: false,
+        executablePath: 'D:\\venv\\chrys.exe',
+        isDefault: true
+      })
+      expect(settings.effective('opencode').isDefault).toBe(false)
+    })
+  })
+
+  it('re-enables an Agent when the user makes it the default', () => {
+    withDb((db) => {
+      const settings = new AgentSettingsRepo(db)
+      settings.setEnabled('chrys', false)
+      settings.setDefault('chrys')
+      expect(settings.effective('chrys')).toMatchObject({
+        enabled: true,
+        isDefault: true
+      })
     })
   })
 })

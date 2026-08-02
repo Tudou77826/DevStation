@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import type { Database, SqlValue } from './database'
 import { RpcError, notFound } from '../rpc/errors'
 import type { Project, Session, Task, TaskStatus } from '@shared/domain'
-import type { AgentEvent, AgentSessionRef } from '@shared/agent'
+import type { AgentEvent, AgentSessionRef, AgentUserSettings } from '@shared/agent'
 
 // ── Row → entity mappers (DB snake_case / 0|1 → domain) ──────────────────────
 
@@ -123,6 +123,26 @@ function parseAgentSessionRef(value: string | null): AgentSessionRef | null {
       throw error
     }
     throw new Error('Invalid stored Agent session reference', { cause: error })
+  }
+}
+
+interface AgentSettingsRow {
+  agent_id: string
+  enabled: number
+  integration_enabled: number
+  executable_path: string | null
+  is_default: number
+  updated_at: number
+}
+
+function mapAgentSettings(row: AgentSettingsRow): AgentUserSettings {
+  return {
+    agentId: row.agent_id,
+    enabled: row.enabled === 1,
+    integrationEnabled: row.integration_enabled === 1,
+    executablePath: row.executable_path,
+    isDefault: row.is_default === 1,
+    updatedAt: row.updated_at
   }
 }
 
@@ -514,6 +534,100 @@ export class SessionRepo {
           outcome
         )
       return { outcome, session: this.get(event.devStationSessionId) }
+    })
+  }
+}
+
+export class AgentSettingsRepo {
+  constructor(private readonly db: Database) {}
+
+  get(agentId: string): AgentUserSettings | null {
+    const row = asRow<AgentSettingsRow>(
+      this.db.prepare('SELECT * FROM agent_settings WHERE agent_id = ?').get(agentId)
+    )
+    return row === undefined ? null : mapAgentSettings(row)
+  }
+
+  effective(agentId: string, fallbackDefaultAgentId = 'opencode'): AgentUserSettings {
+    const stored = this.get(agentId)
+    const explicitDefault = asRow<{ agent_id: string }>(
+      this.db.prepare('SELECT agent_id FROM agent_settings WHERE is_default = 1').get()
+    )
+    return {
+      agentId,
+      enabled: stored?.enabled ?? true,
+      integrationEnabled: stored?.integrationEnabled ?? true,
+      executablePath: stored?.executablePath ?? null,
+      isDefault:
+        stored?.isDefault === true ||
+        (explicitDefault === undefined && agentId === fallbackDefaultAgentId),
+      updatedAt: stored?.updatedAt ?? null
+    }
+  }
+
+  setExecutablePath(agentId: string, executablePath: string | null): AgentUserSettings {
+    const now = Date.now()
+    this.db
+      .prepare(
+        `INSERT INTO agent_settings
+           (agent_id, enabled, integration_enabled, executable_path, is_default, updated_at)
+         VALUES (?, 1, 1, ?, 0, ?)
+         ON CONFLICT(agent_id) DO UPDATE SET
+           executable_path = excluded.executable_path,
+           updated_at = excluded.updated_at`
+      )
+      .run(agentId, executablePath, now)
+    return this.get(agentId)!
+  }
+
+  setEnabled(agentId: string, enabled: boolean): AgentUserSettings {
+    const now = Date.now()
+    this.db
+      .prepare(
+        `INSERT INTO agent_settings
+           (agent_id, enabled, integration_enabled, executable_path, is_default, updated_at)
+         VALUES (?, ?, 1, NULL, 0, ?)
+         ON CONFLICT(agent_id) DO UPDATE SET
+           enabled = excluded.enabled,
+           updated_at = excluded.updated_at`
+      )
+      .run(agentId, enabled ? 1 : 0, now)
+    return this.get(agentId)!
+  }
+
+  setIntegrationEnabled(agentId: string, enabled: boolean): AgentUserSettings {
+    const now = Date.now()
+    this.db
+      .prepare(
+        `INSERT INTO agent_settings
+           (agent_id, enabled, integration_enabled, executable_path, is_default, updated_at)
+         VALUES (?, 1, ?, NULL, 0, ?)
+         ON CONFLICT(agent_id) DO UPDATE SET
+           integration_enabled = excluded.integration_enabled,
+           updated_at = excluded.updated_at`
+      )
+      .run(agentId, enabled ? 1 : 0, now)
+    return this.get(agentId)!
+  }
+
+  setDefault(agentId: string): AgentUserSettings {
+    return this.db.transaction(() => {
+      const now = Date.now()
+      this.db
+        .prepare('UPDATE agent_settings SET is_default = 0 WHERE is_default = 1')
+        .run()
+      this.db
+        .prepare(
+          `INSERT INTO agent_settings
+             (agent_id, enabled, integration_enabled, executable_path, is_default, updated_at)
+           VALUES (?, 1, 1, NULL, 1, ?)
+         ON CONFLICT(agent_id) DO UPDATE SET
+             enabled = 1,
+             is_default = 1,
+             updated_at = excluded.updated_at`
+        )
+        .run(agentId, now)
+      return this.get(agentId)!
     })
   }
 }

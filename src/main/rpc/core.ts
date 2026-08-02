@@ -4,7 +4,12 @@
 // RpcContext that carries shared dependencies (repositories). Handlers return a
 // value or throw RpcError (forwarded with its code) / anything else (INTERNAL).
 import type { ZodTypeAny } from 'zod'
-import type { ProjectRepo, SessionRepo, TaskRepo } from '../db/repositories'
+import type {
+  AgentSettingsRepo,
+  ProjectRepo,
+  SessionRepo,
+  TaskRepo
+} from '../db/repositories'
 import type { BrowserWindow } from 'electron'
 import type { AgentRegistry } from '../agents/registry'
 
@@ -13,6 +18,7 @@ export interface RpcContext {
     tasks: TaskRepo
     projects: ProjectRepo
     sessions: SessionRepo
+    agentSettings: AgentSettingsRepo
   }
   agentRegistry: AgentRegistry
   /** the requesting window; some methods (dialog) need it */

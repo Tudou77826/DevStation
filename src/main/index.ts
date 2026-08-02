@@ -15,7 +15,7 @@ import { ManagedEventBridge } from './agents/managed-event-bridge'
 import { AgentEventInbox } from './agents/agent-event-inbox'
 import { Database } from './db/database'
 import { initializeDatabase } from './db/schema'
-import { ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
+import { AgentSettingsRepo, ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
 import { buildRegistry } from './rpc/methods'
 import { createDispatcher } from './rpc/dispatcher'
 import type { RpcContext } from './rpc/core'
@@ -163,6 +163,7 @@ function initPersistence(): {
   tasks: TaskRepo
   projects: ProjectRepo
   sessions: SessionRepo
+  agentSettings: AgentSettingsRepo
 } {
   const dbPath = join(app.getPath('userData'), 'devstation.db')
   const database = new Database(dbPath)
@@ -171,7 +172,8 @@ function initPersistence(): {
   return {
     tasks: new TaskRepo(database),
     projects: new ProjectRepo(database),
-    sessions: new SessionRepo(database)
+    sessions: new SessionRepo(database),
+    agentSettings: new AgentSettingsRepo(database)
   }
 }
 
@@ -207,10 +209,12 @@ void app.whenReady().then(() => {
       ? { configRoot: join(app.getPath('userData'), 'integrations', 'chrys') }
       : {}
   )
-  for (const [label, diagnostic] of [
-    ['OpenCode', openCodeIntegration.ensureInstalled()],
-    ['Chrys', chrysIntegration.ensureInstalled()]
+  for (const [agentId, label, integration] of [
+    ['opencode', 'OpenCode', openCodeIntegration],
+    ['chrys', 'Chrys', chrysIntegration]
   ] as const) {
+    if (!repositories.agentSettings.effective(agentId).integrationEnabled) continue
+    const diagnostic = integration.ensureInstalled()
     if (diagnostic.state !== 'current') {
       console.warn(`[DevStation] ${label} event integration unavailable:`, diagnostic)
     }
@@ -275,6 +279,7 @@ void app.whenReady().then(() => {
   const agentRuntime = new AgentRuntimeService({
     registry: agentRegistry,
     sessions: repositories.sessions,
+    agentSettings: repositories.agentSettings,
     eventBridge
   })
   terminalManager = new TerminalManager({

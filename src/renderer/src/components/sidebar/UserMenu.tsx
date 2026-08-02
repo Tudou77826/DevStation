@@ -28,7 +28,7 @@ function useEntries(): readonly MenuEntry[] {
       id: 'agent-settings',
       label: 'Agent 设置',
       icon: Bot,
-      onSelect: () => openSettings(activeSection, 'general')
+      onSelect: () => openSettings(activeSection, 'agents')
     },
     {
       id: 'app-settings',

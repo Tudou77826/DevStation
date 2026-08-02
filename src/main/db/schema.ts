@@ -7,7 +7,7 @@
 import type { Database } from './database'
 
 /** Current schema version. Bump when adding migrations. */
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 const CREATE_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -70,6 +70,17 @@ CREATE TABLE IF NOT EXISTS agent_event_receipts (
 );
 CREATE INDEX IF NOT EXISTS idx_agent_event_receipts_session
   ON agent_event_receipts(session_id, occurred_at);
+
+CREATE TABLE IF NOT EXISTS agent_settings (
+  agent_id        TEXT PRIMARY KEY,
+  enabled         INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+  integration_enabled INTEGER NOT NULL DEFAULT 1 CHECK(integration_enabled IN (0, 1)),
+  executable_path TEXT,
+  is_default      INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1)),
+  updated_at      INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_settings_default
+  ON agent_settings(is_default) WHERE is_default = 1;
 `
 
 const PINNED_GUARD_SQL = `
@@ -155,6 +166,19 @@ CREATE INDEX idx_agent_event_receipts_session
   ON agent_event_receipts(session_id, occurred_at);
 `
 
+const AGENT_SETTINGS_SQL = `
+CREATE TABLE agent_settings (
+  agent_id        TEXT PRIMARY KEY,
+  enabled         INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+  integration_enabled INTEGER NOT NULL DEFAULT 1 CHECK(integration_enabled IN (0, 1)),
+  executable_path TEXT,
+  is_default      INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1)),
+  updated_at      INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX idx_agent_settings_default
+  ON agent_settings(is_default) WHERE is_default = 1;
+`
+
 /** Create the initial tables/indexes. Called only from the migration transaction. */
 export function createTables(db: Database): void {
   db.exec(CREATE_SQL)
@@ -184,6 +208,7 @@ export function migrate(db: Database): void {
     if (storedVersion < 3 && storedVersion >= 1) db.exec(SESSION_AGENT_SQL)
     if (storedVersion < 4 && storedVersion >= 1) db.exec(OPEN_AGENT_SCHEMA_SQL)
     if (storedVersion < 5 && storedVersion >= 1) db.exec(AGENT_EVENT_INBOX_SQL)
+    if (storedVersion < 6 && storedVersion >= 1) db.exec(AGENT_SETTINGS_SQL)
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   })
 }

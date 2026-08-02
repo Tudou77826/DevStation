@@ -16,6 +16,10 @@ interface SessionRepository {
   startAgentRun(id: string, agentRunId: string): Session
 }
 
+interface AgentSettingsRepository {
+  effective(agentId: string): { enabled: boolean; executablePath: string | null }
+}
+
 interface PendingAgentDiscovery {
   devStationSessionId: string
   cwd: string
@@ -50,6 +54,7 @@ export interface AgentTerminalConnected {
 export interface AgentRuntimeServiceOptions {
   registry: AgentRegistry
   sessions: Pick<SessionRepo, 'get' | 'setAgentSessionRef' | 'startAgentRun'>
+  agentSettings?: AgentSettingsRepository
   createRunId?: () => string
   now?: () => number
   eventBridge?: Pick<ManagedEventBridge, 'enrichLaunchSpec'>
@@ -71,11 +76,16 @@ export class AgentRuntimeService {
     const session = this.sessions.get(sessionId)
     if (session === null) throw new Error('Session not found')
     const adapter = this.options.registry.require(session.agentId)
+    const settings = this.options.agentSettings?.effective(session.agentId)
+    if (settings?.enabled === false) throw new Error('Coding Agent is disabled')
     const ref = this.validateStoredRef(adapter, session.agentSessionRef)
     const context = {
       cwd,
       devStationSessionId: session.id,
-      agentRunId: this.createRunId()
+      agentRunId: this.createRunId(),
+      ...(settings?.executablePath === null || settings?.executablePath === undefined
+        ? {}
+        : { executablePath: settings.executablePath })
     }
     const resume = ref === null ? null : adapter.buildResume(context, ref)
     const adapterLaunchSpec = resume ?? adapter.buildLaunch(context)

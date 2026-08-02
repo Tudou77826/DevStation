@@ -54,6 +54,25 @@ export interface AgentCatalogEntry {
   descriptor: AgentDescriptor
 }
 
+export interface AgentUserSettings {
+  agentId: string
+  enabled: boolean
+  integrationEnabled: boolean
+  executablePath: string | null
+  isDefault: boolean
+  updatedAt: number | null
+}
+
+export interface AgentDiagnosticEntry {
+  descriptor: AgentDescriptor
+  settings: AgentUserSettings
+  availability: AgentAvailability
+  integration: {
+    state: 'missing' | 'current' | 'outdated' | 'conflict' | 'unavailable'
+    message: string
+  } | null
+}
+
 export interface AgentSessionRef {
   kind: string
   value: string

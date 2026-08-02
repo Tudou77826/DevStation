@@ -1,4 +1,4 @@
-import { ArrowLeft, Palette, Settings2, TerminalSquare, Info } from 'lucide-react'
+import { ArrowLeft, Bot, Palette, Settings2, TerminalSquare, Info } from 'lucide-react'
 import { useUIStore, type SettingsSection } from '@/store/ui'
 import { cn } from '@/lib/utils'
 
@@ -23,6 +23,7 @@ const NAV_GROUPS: readonly NavGroup[] = [
     label: '工作区',
     entries: [
       { id: 'general', title: '通用', icon: Settings2 },
+      { id: 'agents', title: 'Coding Agent', icon: Bot },
       { id: 'terminal', title: '终端', icon: TerminalSquare }
     ]
   },

@@ -9,6 +9,7 @@ export interface AgentLaunchContext {
   cwd: string
   devStationSessionId: string
   agentRunId: string
+  executablePath?: string
 }
 
 export interface AgentSessionLocator {
@@ -39,8 +40,10 @@ export interface CodingAgentAdapter {
   readonly descriptor: AgentDescriptor
   readonly sessionLocator?: AgentSessionLocator
   readonly managedIntegration?: ManagedAgentIntegration
-  probe(): Promise<AgentAvailability>
+  probe(executablePath?: string): Promise<AgentAvailability>
   buildLaunch(context: AgentLaunchContext): AgentLaunchSpec
   buildResume(context: AgentLaunchContext, ref: AgentSessionRef): AgentLaunchSpec | null
+  /** Optional provider-owned interactive authentication command. */
+  buildLogin?(executablePath?: string): AgentLaunchSpec
   validateSessionRef(raw: unknown): AgentSessionRef | null
 }

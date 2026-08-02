@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { SettingsSidebar } from './SettingsSidebar'
 import { AppearancePane, GeneralPane, TerminalPane, AboutPane } from './panes'
+import { CodingAgentsPane } from './CodingAgentsPane'
 import { useUIStore, type SettingsSection } from '@/store/ui'
 
 const PANES: ReadonlyArray<{ id: SettingsSection; render: () => React.ReactElement }> = [
   { id: 'appearance', render: () => <AppearancePane /> },
   { id: 'general', render: () => <GeneralPane /> },
+  { id: 'agents', render: () => <CodingAgentsPane /> },
   { id: 'terminal', render: () => <TerminalPane /> },
   { id: 'about', render: () => <AboutPane /> }
 ] as const

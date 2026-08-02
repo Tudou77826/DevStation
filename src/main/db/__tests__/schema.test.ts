@@ -14,6 +14,7 @@ describe('schema + migrations', () => {
       expect(names).toContain('tasks')
       expect(names).toContain('sessions')
       expect(names).toContain('agent_event_receipts')
+      expect(names).toContain('agent_settings')
     })
   })
 
@@ -39,6 +40,20 @@ describe('schema + migrations', () => {
         'agent_status_source',
         'agent_status_updated_at',
         'agent_status_event_id'
+      ])
+    )
+    const agentSettingsColumns = db
+      .prepare('PRAGMA table_info(agent_settings)')
+      .all() as {
+      name: string
+    }[]
+    expect(agentSettingsColumns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        'agent_id',
+        'enabled',
+        'integration_enabled',
+        'executable_path',
+        'is_default'
       ])
     )
     expect(() =>

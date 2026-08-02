@@ -50,21 +50,26 @@ export class ChrysAdapter implements CodingAgentAdapter {
 
   constructor(readonly managedIntegration?: ManagedAgentIntegration) {}
 
-  probe(): Promise<AgentAvailability> {
-    return probeCli({ executable: 'chrys', args: ['--version'], env: {} })
+  probe(executablePath?: string): Promise<AgentAvailability> {
+    return probeCli({
+      executable: executablePath ?? 'chrys',
+      args: ['--version'],
+      env: {}
+    })
   }
 
-  buildLaunch(_context: AgentLaunchContext): AgentLaunchSpec {
-    return { executable: 'chrys', args: [], env: {} }
+  buildLaunch(context: AgentLaunchContext): AgentLaunchSpec {
+    return { executable: context.executablePath ?? 'chrys', args: [], env: {} }
   }
 
-  buildResume(
-    _context: AgentLaunchContext,
-    ref: AgentSessionRef
-  ): AgentLaunchSpec | null {
+  buildResume(context: AgentLaunchContext, ref: AgentSessionRef): AgentLaunchSpec | null {
     const valid = this.validateSessionRef(ref)
     if (valid === null) return null
-    return { executable: 'chrys', args: ['-s', valid.value], env: {} }
+    return {
+      executable: context.executablePath ?? 'chrys',
+      args: ['-s', valid.value],
+      env: {}
+    }
   }
 
   validateSessionRef(raw: unknown): AgentSessionRef | null {
