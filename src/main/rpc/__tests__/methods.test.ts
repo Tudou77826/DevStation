@@ -235,7 +235,11 @@ describe('RPC method registry', () => {
     const repos = repositories()
     const ctx = context(repos)
     const integration = {
-      diagnose: vi.fn(() => ({ state: 'current', path: 'hooks.json', message: 'ready' }))
+      diagnose: vi.fn(() => ({
+        state: 'current',
+        path: 'C:\\Users\\alice\\.secret\\hooks.json',
+        message: 'ready; token=private-value'
+      }))
     }
     const adapter = {
       descriptor: {
@@ -271,9 +275,12 @@ describe('RPC method registry', () => {
       {
         descriptor: { id: 'chrys' },
         availability: { status: 'available', version: '1.2.3' },
-        integration: { state: 'current', message: 'ready' }
+        integration: { state: 'current', message: '事件集成已就绪' }
       }
     ])
+    const serialized = JSON.stringify(await call('agents.diagnostics', {}, ctx))
+    expect(serialized).not.toContain('alice')
+    expect(serialized).not.toContain('private-value')
     expect(adapter.probe).toHaveBeenCalledWith('D:\\tools\\chrys.exe')
   })
 
@@ -393,16 +400,20 @@ describe('RPC method registry', () => {
     const ctx = context(repos)
     const uninstall = vi.fn(() => ({
       state: 'missing',
-      path: 'hooks',
-      message: 'removed'
+      path: 'C:\\Users\\alice\\hooks',
+      message: 'removed token=private-value'
     }))
     vi.mocked(ctx.agentRegistry.get).mockReturnValue({
       managedIntegration: { uninstall, ensureInstalled: vi.fn(), diagnose: vi.fn() }
     } as never)
 
-    await expect(
-      call('agents.integrationAction', { agentId: 'chrys', action: 'disable' }, ctx)
-    ).resolves.toEqual({ state: 'missing', message: 'removed' })
+    const result = await call(
+      'agents.integrationAction',
+      { agentId: 'chrys', action: 'disable' },
+      ctx
+    )
+    expect(result).toEqual({ state: 'missing', message: '事件集成未安装' })
+    expect(JSON.stringify(result)).not.toMatch(/alice|private-value/)
     expect(uninstall).toHaveBeenCalledOnce()
     expect(repos.agentSettings.setIntegrationEnabled).toHaveBeenCalledWith('chrys', false)
   })
@@ -421,7 +432,7 @@ describe('RPC method registry', () => {
 
     await expect(
       call('agents.integrationAction', { agentId: 'chrys', action: 'repair' }, ctx)
-    ).resolves.toEqual({ state: 'current', message: 'installed' })
+    ).resolves.toEqual({ state: 'current', message: '事件集成已就绪' })
     expect(repos.agentSettings.setIntegrationEnabled).toHaveBeenCalledWith('chrys', true)
 
     vi.mocked(ctx.agentRegistry.get).mockReturnValue({} as never)

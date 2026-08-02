@@ -29,6 +29,14 @@ function adapter(id: string): CodingAgentAdapter {
   }
 }
 
+function mutateDescriptor(
+  mutate: (descriptor: CodingAgentAdapter['descriptor']) => void
+): CodingAgentAdapter {
+  const value = adapter('contract-test')
+  mutate(value.descriptor)
+  return value
+}
+
 describe('AgentRegistry', () => {
   it('registers stable adapter ids and exposes provider-neutral descriptors', async () => {
     const openCode = adapter('opencode')
@@ -50,5 +58,73 @@ describe('AgentRegistry', () => {
     const registry = new AgentRegistry()
     expect(registry.get('removed-agent')).toBeNull()
     expect(() => registry.require('removed-agent')).toThrow('not installed')
+  })
+
+  it('rejects descriptor versions, capabilities and action schemas that generic UI cannot honor', () => {
+    expect(
+      () =>
+        new AgentRegistry([
+          mutateDescriptor((descriptor) => {
+            ;(descriptor.settings as { version: number }).version = 0
+          })
+        ])
+    ).toThrow('settings version')
+    expect(
+      () =>
+        new AgentRegistry([
+          mutateDescriptor((descriptor) => {
+            ;(descriptor.capabilities as Record<string, unknown>)['resume'] = 'yes'
+          })
+        ])
+    ).toThrow('capability')
+    expect(
+      () =>
+        new AgentRegistry([
+          mutateDescriptor((descriptor) => {
+            ;(descriptor.settings as unknown as { actions: unknown[] }).actions = [
+              { id: 'run', label: 'Run', kind: 'arbitrary-command' }
+            ]
+          })
+        ])
+    ).toThrow('settings action')
+  })
+
+  it('rejects duplicate schema ids, missing login implementations and dangling setup actions', () => {
+    expect(
+      () =>
+        new AgentRegistry([
+          mutateDescriptor((descriptor) => {
+            ;(descriptor.settings as unknown as { fields: unknown[] }).fields = [
+              { key: 'path', label: 'Path', kind: 'path', required: false },
+              { key: 'path', label: 'Other path', kind: 'path', required: false }
+            ]
+          })
+        ])
+    ).toThrow('duplicate settings field')
+    expect(
+      () =>
+        new AgentRegistry([
+          mutateDescriptor((descriptor) => {
+            ;(descriptor.settings as unknown as { actions: unknown[] }).actions = [
+              { id: 'login', label: 'Login', kind: 'open-login' }
+            ]
+          })
+        ])
+    ).toThrow('no implementation')
+    expect(
+      () =>
+        new AgentRegistry([
+          mutateDescriptor((descriptor) => {
+            ;(descriptor.setupSteps as unknown[]) = [
+              {
+                id: 'setup',
+                title: 'Setup',
+                description: 'Run setup',
+                actionId: 'missing'
+              }
+            ]
+          })
+        ])
+    ).toThrow('unknown action')
   })
 })

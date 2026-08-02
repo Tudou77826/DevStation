@@ -235,6 +235,8 @@ test('任务详情中的工作会话可直达对应 AI 工作区', async () => {
 
     const aiWorkspace = page.getByRole('region', { name: 'AI 空间工作区' })
     await expect(aiWorkspace).toBeVisible()
+    await expect(page.getByText(/Test Agent .* PowerShell .* PID \d+/)).toBeVisible()
+    await expect(page.locator('.xterm-rows')).toContainText('DEVSTATION_TEST_AGENT_READY')
     await expect(
       aiWorkspace.getByText('会话直达验收 会话', { exact: true })
     ).toBeVisible()

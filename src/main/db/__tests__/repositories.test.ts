@@ -293,6 +293,24 @@ describe('AgentSettingsRepo', () => {
       })
     })
   })
+
+  it('preserves settings for a temporarily unknown adapter without making it the default', () => {
+    withDb((db) => {
+      const settings = new AgentSettingsRepo(db)
+      settings.setExecutablePath('removed-agent', 'D:\\agents\\removed.exe')
+      settings.setIntegrationEnabled('removed-agent', false)
+      settings.setEnabled('removed-agent', false)
+
+      expect(settings.effective('removed-agent')).toMatchObject({
+        agentId: 'removed-agent',
+        enabled: false,
+        integrationEnabled: false,
+        executablePath: 'D:\\agents\\removed.exe',
+        isDefault: false
+      })
+      expect(settings.effective('opencode').isDefault).toBe(true)
+    })
+  })
 })
 
 describe('persistence (file DB reopen)', () => {

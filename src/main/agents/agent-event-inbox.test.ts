@@ -13,23 +13,36 @@ import { AgentRegistry } from './registry'
 
 const roots: string[] = []
 
-function harness() {
-  const root = mkdtempSync(join(tmpdir(), 'devstation-event-inbox-'))
-  roots.push(root)
-  const db = new Database(':memory:')
+interface HarnessOptions {
+  root?: string
+  dbPath?: string
+  existingSessionId?: string
+}
+
+function harness(options: HarnessOptions = {}) {
+  const root = options.root ?? mkdtempSync(join(tmpdir(), 'devstation-event-inbox-'))
+  if (options.root === undefined) roots.push(root)
+  const db = new Database(options.dbPath ?? ':memory:')
   initializeDatabase(db)
   const projects = new ProjectRepo(db)
   const tasks = new TaskRepo(db)
   const sessions = new SessionRepo(db)
-  const project = projects.create({
-    name: 'Repo',
-    path: root,
-    pathKey: root.toLowerCase()
-  })
-  const task = tasks.create({ title: 'Work' })
-  tasks.setProject(task.id, project.id)
-  const session = sessions.createFromTask(task.id, 'test-agent')
-  sessions.startAgentRun(session.id, 'run-1')
+  const session =
+    options.existingSessionId === undefined
+      ? (() => {
+          const project = projects.create({
+            name: 'Repo',
+            path: root,
+            pathKey: root.toLowerCase()
+          })
+          const task = tasks.create({ title: 'Work' })
+          tasks.setProject(task.id, project.id)
+          const created = sessions.createFromTask(task.id, 'test-agent')
+          sessions.startAgentRun(created.id, 'run-1')
+          return created
+        })()
+      : sessions.get(options.existingSessionId)
+  if (session === null) throw new Error('Existing test session not found')
   const adapter: CodingAgentAdapter = {
     descriptor: {
       id: 'test-agent',
@@ -116,6 +129,37 @@ describe('AgentEventInbox', () => {
     )
     expect(readdirSync(join(h.bridge.inboxRoot, h.token))).toEqual(['incomplete.tmp'])
     h.db.close()
+  })
+
+  it('replays pending files and preserves duplicate receipts across database restarts', () => {
+    const root = mkdtempSync(join(tmpdir(), 'devstation-event-restart-'))
+    roots.push(root)
+    const dbPath = join(root, 'state.sqlite')
+    const first = harness({ root, dbPath })
+    const persistedEvent = first.event({ eventId: 'event-across-restart' })
+    first.bridge.writeEvent(first.token, persistedEvent)
+    const sessionId = first.session.id
+    first.db.close()
+
+    const reopened = harness({ root, dbPath, existingSessionId: sessionId })
+    expect(reopened.inbox.consumeNow()).toEqual({
+      consumed: 1,
+      quarantined: 0,
+      retained: 0
+    })
+    expect(reopened.sessions.get(sessionId)?.status).toBe('working')
+    reopened.db.close()
+
+    const again = harness({ root, dbPath, existingSessionId: sessionId })
+    again.bridge.writeEvent(again.token, persistedEvent)
+    expect(again.inbox.consumeNow()).toEqual({
+      consumed: 1,
+      quarantined: 0,
+      retained: 0
+    })
+    expect(again.sessions.get(sessionId)?.status).toBe('working')
+    expect(again.onSessionUpdated).not.toHaveBeenCalled()
+    again.db.close()
   })
 
   it('keeps duplicate, out-of-order and prior-run events from regressing state', () => {
