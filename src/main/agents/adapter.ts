@@ -20,9 +20,25 @@ export interface AgentSessionLocator {
   ): AgentSessionRef | null
 }
 
+export type ManagedIntegrationState =
+  'missing' | 'current' | 'outdated' | 'conflict' | 'unavailable'
+
+export interface ManagedIntegrationDiagnostic {
+  state: ManagedIntegrationState
+  path: string
+  message: string
+}
+
+export interface ManagedAgentIntegration {
+  diagnose(): ManagedIntegrationDiagnostic
+  ensureInstalled(): ManagedIntegrationDiagnostic
+  uninstall(): ManagedIntegrationDiagnostic
+}
+
 export interface CodingAgentAdapter {
   readonly descriptor: AgentDescriptor
   readonly sessionLocator?: AgentSessionLocator
+  readonly managedIntegration?: ManagedAgentIntegration
   probe(): Promise<AgentAvailability>
   buildLaunch(context: AgentLaunchContext): AgentLaunchSpec
   buildResume(context: AgentLaunchContext, ref: AgentSessionRef): AgentLaunchSpec | null

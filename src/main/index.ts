@@ -6,6 +6,7 @@ import { TerminalManager } from './terminal/terminal-manager'
 import { TerminalHostClient } from './terminal/terminal-host-client'
 import { OpenCodeSessionLocator } from './agents/opencode-session-locator'
 import { OpenCodeAdapter } from './agents/opencode-adapter'
+import { OpenCodeManagedIntegration } from './agents/opencode-managed-integration'
 import { AgentRegistry } from './agents/registry'
 import { AgentRuntimeService } from './agents/runtime-service'
 import { ManagedEventBridge } from './agents/managed-event-bridge'
@@ -214,8 +215,23 @@ void app.whenReady().then(() => {
     userDataPath: app.getPath('userData'),
     hostEntryPath: join(__dirname, 'terminal-host.js')
   })
+  const isolateExternalIntegrations =
+    process.env['DEVSTATION_E2E'] === '1' ||
+    process.env['DEVSTATION_PACKAGED_SMOKE'] === '1'
+  const openCodeIntegration = new OpenCodeManagedIntegration(
+    isolateExternalIntegrations
+      ? { configRoot: join(app.getPath('userData'), 'integrations', 'opencode') }
+      : {}
+  )
+  const integrationDiagnostic = openCodeIntegration.ensureInstalled()
+  if (integrationDiagnostic.state !== 'current') {
+    console.warn(
+      '[DevStation] OpenCode event integration unavailable:',
+      integrationDiagnostic
+    )
+  }
   const agentRegistry = new AgentRegistry([
-    new OpenCodeAdapter(new OpenCodeSessionLocator())
+    new OpenCodeAdapter(new OpenCodeSessionLocator(), openCodeIntegration)
   ])
   let eventBridge: ManagedEventBridge | undefined
   try {
@@ -224,7 +240,12 @@ void app.whenReady().then(() => {
     agentEventInbox = new AgentEventInbox({
       inboxRoot: eventBridge.inboxRoot,
       registry: agentRegistry,
-      sessions: repositories.sessions
+      sessions: repositories.sessions,
+      onSessionUpdated: (session) => {
+        if (mainWindow !== null && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('agent:session-updated', session)
+        }
+      }
     })
     agentEventInbox.start()
   } catch (error) {

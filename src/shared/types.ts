@@ -2,6 +2,7 @@
 // Keep this module free of any Node/Electron/DOM-only imports.
 
 import type { RpcMethodName, RpcParams, RpcResponse, RpcResult } from './rpc'
+import type { Session } from './domain'
 
 /**
  * Whitelisted API exposed by the preload script to the sandboxed renderer.
@@ -18,6 +19,10 @@ export interface DevStationAPI {
   readonly theme: {
     /** push the resolved theme so the native window chrome can follow it */
     update: (theme: 'dark' | 'light') => Promise<unknown>
+  }
+  readonly agent: {
+    /** Receive trusted Session snapshots after Main applies an Agent event. */
+    onSessionUpdated: (listener: (session: Session) => void) => () => void
   }
   readonly terminal: {
     connect: (request: TerminalConnectRequest) => Promise<TerminalSession>

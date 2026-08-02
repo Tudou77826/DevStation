@@ -243,6 +243,26 @@ describe('renderer data store', () => {
     expect(useDataStore.getState().error).toBe('打开失败')
   })
 
+  it('applies an Agent session snapshot to every loaded cache', () => {
+    const untouched = session('s1')
+    const original = session('s2', { projectId: 'p1' })
+    const updated = session('s2', {
+      projectId: 'p1',
+      status: 'waiting',
+      statusSource: 'provider-event',
+      statusUpdatedAt: 100
+    })
+    useDataStore.setState({
+      sessionsByTask: { t1: [untouched, original] },
+      sessionsByProject: { p1: [original] }
+    })
+
+    useDataStore.getState().applySessionUpdate(updated)
+
+    expect(useDataStore.getState().sessionsByTask.t1).toEqual([untouched, updated])
+    expect(useDataStore.getState().sessionsByProject.p1).toEqual([updated])
+  })
+
   it('maps RPC errors and unknown exceptions to safe user messages', () => {
     expect(
       useDataStore.getState().errorMessage({ code: 'CONFLICT', message: '重复' })

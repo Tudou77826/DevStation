@@ -62,12 +62,14 @@ function harness() {
   const bridge = new ManagedEventBridge(join(root, 'agent-events'))
   bridge.ensureInstalled()
   const logger = { warn: vi.fn(), error: vi.fn() }
+  const onSessionUpdated = vi.fn()
   const inbox = new AgentEventInbox({
     inboxRoot: bridge.inboxRoot,
     registry: new AgentRegistry([adapter]),
     sessions,
     now: () => 10_000,
-    logger
+    logger,
+    onSessionUpdated
   })
   const token = 'a'.repeat(64)
   const event = (overrides: Partial<AgentEvent> = {}): AgentEvent => ({
@@ -80,7 +82,17 @@ function harness() {
     occurredAt: 1_000,
     ...overrides
   })
-  return { db, sessions, session, bridge, inbox, token, event, logger }
+  return {
+    db,
+    sessions,
+    session,
+    bridge,
+    inbox,
+    token,
+    event,
+    logger,
+    onSessionUpdated
+  }
 }
 
 afterEach(() => {
@@ -98,6 +110,10 @@ describe('AgentEventInbox', () => {
       statusSource: 'provider-event',
       statusUpdatedAt: 1_000
     })
+    expect(h.onSessionUpdated).toHaveBeenCalledOnce()
+    expect(h.onSessionUpdated).toHaveBeenCalledWith(
+      expect.objectContaining({ id: h.session.id, status: 'working' })
+    )
     expect(readdirSync(join(h.bridge.inboxRoot, h.token))).toEqual(['incomplete.tmp'])
     h.db.close()
   })
@@ -107,6 +123,7 @@ describe('AgentEventInbox', () => {
     const current = h.event({ eventId: 'event-working', occurredAt: 2_000 })
     h.bridge.writeEvent(h.token, current)
     h.inbox.consumeNow()
+    h.onSessionUpdated.mockClear()
     h.bridge.writeEvent(h.token, current)
     h.bridge.writeEvent(
       h.token,
@@ -126,6 +143,7 @@ describe('AgentEventInbox', () => {
       agentRunId: 'run-2',
       statusSource: 'none'
     })
+    expect(h.onSessionUpdated).not.toHaveBeenCalled()
     h.db.close()
   })
 

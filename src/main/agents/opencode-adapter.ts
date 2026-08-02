@@ -7,7 +7,8 @@ import type {
 import type {
   AgentLaunchContext,
   AgentSessionLocator,
-  CodingAgentAdapter
+  CodingAgentAdapter,
+  ManagedAgentIntegration
 } from './adapter'
 import { probeCli } from './cli-probe'
 import type { OpenCodeSessionLocator } from './opencode-session-locator'
@@ -21,13 +22,18 @@ export const OPEN_CODE_DESCRIPTOR: AgentDescriptor = {
   capabilities: {
     resume: true,
     sessionIdentity: true,
-    activityEvents: false,
+    activityEvents: true,
     transcript: false
   },
   settings: {
-    version: 1,
+    version: 2,
     fields: [],
-    actions: [{ id: 'probe', label: '重新检测', kind: 'probe' }]
+    actions: [
+      { id: 'probe', label: '重新检测', kind: 'probe' },
+      { id: 'events-enable', label: '启用事件集成', kind: 'integration-enable' },
+      { id: 'events-repair', label: '修复事件集成', kind: 'integration-repair' },
+      { id: 'events-disable', label: '停用事件集成', kind: 'integration-disable' }
+    ]
   },
   setupSteps: [
     {
@@ -42,8 +48,13 @@ export const OPEN_CODE_DESCRIPTOR: AgentDescriptor = {
 export class OpenCodeAdapter implements CodingAgentAdapter {
   readonly descriptor = OPEN_CODE_DESCRIPTOR
   readonly sessionLocator: AgentSessionLocator
+  readonly managedIntegration?: ManagedAgentIntegration
 
-  constructor(locator: Pick<OpenCodeSessionLocator, 'snapshot' | 'findCreatedSession'>) {
+  constructor(
+    locator: Pick<OpenCodeSessionLocator, 'snapshot' | 'findCreatedSession'>,
+    managedIntegration?: ManagedAgentIntegration
+  ) {
+    this.managedIntegration = managedIntegration
     this.sessionLocator = {
       snapshot: (cwd) => locator.snapshot(cwd),
       findCreatedSession: (cwd, createdAfter, excludedIds) => {
@@ -67,7 +78,11 @@ export class OpenCodeAdapter implements CodingAgentAdapter {
   ): AgentLaunchSpec | null {
     const valid = this.validateSessionRef(ref)
     if (valid === null) return null
-    return { executable: 'opencode', args: ['--session', valid.value], env: {} }
+    return {
+      executable: 'opencode',
+      args: ['--session', valid.value],
+      env: { DEVSTATION_OPENCODE_SESSION_ID: valid.value }
+    }
   }
 
   validateSessionRef(raw: unknown): AgentSessionRef | null {

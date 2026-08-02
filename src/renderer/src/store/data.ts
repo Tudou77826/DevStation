@@ -60,6 +60,7 @@ interface DataState {
   loadSessionsByProject: (projectId: string) => Promise<Session[]>
   createSessionFromTask: (taskId: string) => Promise<Session | null>
   touchSession: (id: string) => Promise<void>
+  applySessionUpdate: (session: Session) => void
 
   /** map RpcError → a short Chinese message */
   errorMessage: (e: unknown) => string
@@ -266,6 +267,25 @@ export const useDataStore = create<DataState>((set, get) => ({
     } catch (e) {
       set({ error: get().errorMessage(e) })
     }
+  },
+
+  applySessionUpdate(session) {
+    const replace = (sessions: Session[]): Session[] =>
+      sessions.map((current) => (current.id === session.id ? session : current))
+    set((state) => ({
+      sessionsByTask: Object.fromEntries(
+        Object.entries(state.sessionsByTask).map(([key, sessions]) => [
+          key,
+          replace(sessions)
+        ])
+      ),
+      sessionsByProject: Object.fromEntries(
+        Object.entries(state.sessionsByProject).map(([key, sessions]) => [
+          key,
+          replace(sessions)
+        ])
+      )
+    }))
   },
 
   errorMessage(e) {

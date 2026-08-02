@@ -95,7 +95,9 @@ param(
   [string]$Kind,
   [string]$SessionRefKind,
   [string]$SessionRefValue,
-  [string]$TranscriptPath
+  [string]$TranscriptPath,
+  [string]$EventId,
+  [long]$OccurredAt = 0
 )
 $ErrorActionPreference = 'Stop'
 $token = $env:DEVSTATION_AGENT_EVENT_TOKEN
@@ -108,15 +110,17 @@ if (-not [IO.Path]::IsPathRooted($inbox)) { throw 'Invalid DevStation inbox path
 foreach ($id in @($agentId, $sessionId, $runId)) {
   if ($id -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$') { throw 'Invalid DevStation run identity' }
 }
-$eventId = [Guid]::NewGuid().ToString()
+if ([string]::IsNullOrEmpty($EventId)) { $EventId = [Guid]::NewGuid().ToString() }
+if ($EventId -notmatch '^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$') { throw 'Invalid Agent event id' }
+if ($OccurredAt -le 0) { $OccurredAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
 $event = [ordered]@{
   version = ${AGENT_EVENT_VERSION}
-  eventId = $eventId
+  eventId = $EventId
   agentId = $agentId
   devStationSessionId = $sessionId
   agentRunId = $runId
   kind = $Kind
-  occurredAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+  occurredAt = $OccurredAt
 }
 if ($Kind -eq 'session-bound') {
   if ([string]::IsNullOrWhiteSpace($SessionRefKind) -or [string]::IsNullOrWhiteSpace($SessionRefValue)) {
@@ -127,8 +131,8 @@ if ($Kind -eq 'session-bound') {
 }
 $directory = Join-Path $inbox $token
 [IO.Directory]::CreateDirectory($directory) | Out-Null
-$target = Join-Path $directory ($eventId + '.json')
-$temporary = Join-Path $directory ($eventId + '.' + [Guid]::NewGuid().ToString() + '.tmp')
+$target = Join-Path $directory ($EventId + '.json')
+$temporary = Join-Path $directory ($EventId + '.' + [Guid]::NewGuid().ToString() + '.tmp')
 $utf8 = [Text.UTF8Encoding]::new($false)
 [IO.File]::WriteAllText($temporary, ($event | ConvertTo-Json -Compress -Depth 4), $utf8)
 [IO.File]::Move($temporary, $target)
