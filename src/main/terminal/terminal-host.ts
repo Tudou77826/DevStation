@@ -71,7 +71,7 @@ export class TerminalHost extends EventEmitter<TerminalHostEvents> {
       cols: request.cols,
       rows: request.rows,
       cwd: request.cwd,
-      env: this.environment()
+      env: this.environment(request.shell.env)
     })
     const hosted: HostedTerminal = {
       process: terminalProcess,
@@ -96,13 +96,6 @@ export class TerminalHost extends EventEmitter<TerminalHostEvents> {
         reason: hosted.stopRequested ? 'stopped' : 'exited'
       })
     })
-    if (request.startupCommand !== undefined) {
-      setTimeout(() => {
-        if (this.sessions.get(request.sessionId) === hosted) {
-          terminalProcess.write(`${request.startupCommand}\r`)
-        }
-      }, 150)
-    }
     return this.result(request.sessionId, hosted, true)
   }
 
@@ -164,11 +157,14 @@ export class TerminalHost extends EventEmitter<TerminalHostEvents> {
     }
   }
 
-  private environment(): Record<string, string> {
-    return Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] => entry[1] !== undefined
-      )
-    )
+  private environment(overrides: Record<string, string> = {}): Record<string, string> {
+    return {
+      ...Object.fromEntries(
+        Object.entries(process.env).filter(
+          (entry): entry is [string, string] => entry[1] !== undefined
+        )
+      ),
+      ...overrides
+    }
   }
 }

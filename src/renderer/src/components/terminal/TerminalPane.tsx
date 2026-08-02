@@ -183,9 +183,9 @@ export function TerminalPane({
               已接回
             </span>
           )}
-          {session?.agentResumed === true && (
+          {session?.agentResumeRequested === true && (
             <span className="rounded bg-sky-400/10 px-1.5 py-0.5 text-[10px] text-sky-400">
-              已恢复会话
+              已发起恢复
             </span>
           )}
         </div>

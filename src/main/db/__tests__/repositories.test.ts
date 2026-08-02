@@ -311,6 +311,22 @@ describe('AgentSettingsRepo', () => {
       expect(settings.effective('opencode').isDefault).toBe(true)
     })
   })
+
+  it('persists versioned adapter values without changing independent runtime choices', () => {
+    withDb((db) => {
+      const settings = new AgentSettingsRepo(db)
+      settings.setEnabled('chrys', false)
+      settings.setIntegrationEnabled('chrys', false)
+      settings.setValues('chrys', 3, { mode: 'safe', telemetry: false })
+
+      expect(settings.effective('chrys')).toMatchObject({
+        enabled: false,
+        integrationEnabled: false,
+        schemaVersion: 3,
+        values: { mode: 'safe', telemetry: false }
+      })
+    })
+  })
 })
 
 describe('persistence (file DB reopen)', () => {

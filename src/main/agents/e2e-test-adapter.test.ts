@@ -12,7 +12,8 @@ describe('E2ETestAgentAdapter', () => {
       adapter.buildLaunch({
         cwd: 'C:\\repo',
         devStationSessionId: 'session-1',
-        agentRunId: 'run-1'
+        agentRunId: 'run-1',
+        settings: {}
       })
     ).toEqual({
       executable: 'powershell.exe',
@@ -28,7 +29,12 @@ describe('E2ETestAgentAdapter', () => {
     expect(adapter.validateSessionRef({ kind: 'fake', value: 'x' })).toBeNull()
     expect(
       adapter.buildResume(
-        { cwd: 'C:\\repo', devStationSessionId: 'session-1', agentRunId: 'run-1' },
+        {
+          cwd: 'C:\\repo',
+          devStationSessionId: 'session-1',
+          agentRunId: 'run-1',
+          settings: {}
+        },
         { kind: 'fake', value: 'x' }
       )
     ).toBeNull()

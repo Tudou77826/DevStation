@@ -5,7 +5,12 @@
 // maps to its Zod-typed params and TS result type, so callers get static typing
 // and the dispatcher only accepts registered methods.
 import type { Project, Session, Task, TaskStatus } from './domain'
-import type { AgentCatalogEntry, AgentDiagnosticEntry, AgentUserSettings } from './agent'
+import type {
+  AgentCatalogEntry,
+  AgentDiagnosticEntry,
+  AgentSettingValue,
+  AgentUserSettings
+} from './agent'
 
 export type RpcErrorCode =
   | 'VALIDATION'
@@ -76,6 +81,10 @@ export interface AgentEnabledParam extends AgentIdParam {
 export interface AgentIntegrationActionParam extends AgentIdParam {
   action: 'enable' | 'repair' | 'disable'
 }
+export interface AgentSettingParam extends AgentIdParam {
+  key: string
+  value: AgentSettingValue | null
+}
 
 // ── The whitelist map: method name → { params, result } ──────────────────────
 
@@ -92,6 +101,7 @@ export interface RpcMethodMap {
   'agents.clearExecutable': { params: AgentIdParam; result: AgentUserSettings }
   'agents.setEnabled': { params: AgentEnabledParam; result: AgentUserSettings }
   'agents.setDefault': { params: AgentIdParam; result: AgentUserSettings }
+  'agents.setSetting': { params: AgentSettingParam; result: AgentUserSettings }
   'agents.openLoginTerminal': { params: AgentIdParam; result: { ok: true } }
   'agents.integrationAction': {
     params: AgentIntegrationActionParam

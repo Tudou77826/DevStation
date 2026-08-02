@@ -9,9 +9,10 @@ import { OpenCodeAdapter } from './agents/opencode-adapter'
 import { OpenCodeManagedIntegration } from './agents/opencode-managed-integration'
 import { ChrysAdapter } from './agents/chrys-adapter'
 import { ChrysManagedIntegration } from './agents/chrys-managed-integration'
-import { E2ETestAgentAdapter } from './agents/e2e-test-adapter'
+import { E2EAlternateAgentAdapter, E2ETestAgentAdapter } from './agents/e2e-test-adapter'
 import type { CodingAgentAdapter } from './agents/adapter'
 import { AgentRegistry } from './agents/registry'
+import { AgentSettingsService } from './agents/settings-service'
 import { AgentRuntimeService } from './agents/runtime-service'
 import { ManagedEventBridge } from './agents/managed-event-bridge'
 import { AgentEventInbox } from './agents/agent-event-inbox'
@@ -230,8 +231,14 @@ void app.whenReady().then(() => {
     new OpenCodeAdapter(new OpenCodeSessionLocator(), openCodeIntegration),
     new ChrysAdapter(chrysIntegration)
   ]
-  if (process.env['DEVSTATION_E2E'] === '1') adapters.push(new E2ETestAgentAdapter())
+  if (process.env['DEVSTATION_E2E'] === '1') {
+    adapters.push(new E2ETestAgentAdapter(), new E2EAlternateAgentAdapter())
+  }
   const agentRegistry = new AgentRegistry(adapters)
+  const agentSettings = new AgentSettingsService(
+    agentRegistry,
+    repositories.agentSettings
+  )
 
   // 3. RPC dispatcher on a single channel, sender-bound context.
   const rpcRegistry = buildRegistry()
@@ -241,6 +248,7 @@ void app.whenReady().then(() => {
       return {
         repositories,
         agentRegistry,
+        agentSettings,
         sender: BrowserWindow.fromWebContents(sender)
       }
     },
@@ -288,7 +296,7 @@ void app.whenReady().then(() => {
   const agentRuntime = new AgentRuntimeService({
     registry: agentRegistry,
     sessions: repositories.sessions,
-    agentSettings: repositories.agentSettings,
+    agentSettings,
     eventBridge
   })
   terminalManager = new TerminalManager({

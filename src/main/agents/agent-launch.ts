@@ -11,12 +11,16 @@ export function encodePowerShellInvocation(spec: AgentLaunchSpec): string {
   const environment = Object.entries(spec.env).map(
     ([key, value]) => `$env:${key} = ${quotePowerShell(value)}`
   )
-  const invocation = [
-    '&',
-    quotePowerShell(spec.executable),
-    ...spec.args.map(quotePowerShell)
-  ].join(' ')
+  const invocation = encodePowerShellCommand(spec)
   return [...environment, invocation].join('; ')
+}
+
+/** Encodes only the executable and argv; environment is injected by the PTY host. */
+export function encodePowerShellCommand(spec: AgentLaunchSpec): string {
+  validateAgentLaunchSpec(spec)
+  return ['&', quotePowerShell(spec.executable), ...spec.args.map(quotePowerShell)].join(
+    ' '
+  )
 }
 
 export function validateAgentLaunchSpec(spec: AgentLaunchSpec): void {

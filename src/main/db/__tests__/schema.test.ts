@@ -53,7 +53,9 @@ describe('schema + migrations', () => {
         'enabled',
         'integration_enabled',
         'executable_path',
-        'is_default'
+        'is_default',
+        'settings_version',
+        'settings_json'
       ])
     )
     expect(() =>
@@ -65,6 +67,40 @@ describe('schema + migrations', () => {
         )
         .run()
     ).toThrow()
+    db.close()
+  })
+
+  it('upgrades v6 Agent settings without losing runtime choices', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE agent_settings (
+        agent_id TEXT PRIMARY KEY,
+        enabled INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0, 1)),
+        integration_enabled INTEGER NOT NULL DEFAULT 1
+          CHECK(integration_enabled IN (0, 1)),
+        executable_path TEXT,
+        is_default INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1)),
+        updated_at INTEGER NOT NULL
+      );
+      INSERT INTO agent_settings
+        (agent_id, enabled, integration_enabled, executable_path, is_default, updated_at)
+      VALUES ('chrys', 0, 0, 'D:\\tools\\chrys.exe', 1, 123);
+      PRAGMA user_version = 6;
+    `)
+
+    migrate(db)
+    expect(db.pragmaValue('user_version')).toBe(SCHEMA_VERSION)
+    expect(
+      db.prepare('SELECT * FROM agent_settings WHERE agent_id = ?').get('chrys')
+    ).toMatchObject({
+      enabled: 0,
+      integration_enabled: 0,
+      executable_path: 'D:\\tools\\chrys.exe',
+      is_default: 1,
+      settings_version: 1,
+      settings_json: '{}',
+      updated_at: 123
+    })
     db.close()
   })
 

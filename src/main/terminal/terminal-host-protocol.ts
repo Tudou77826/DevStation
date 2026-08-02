@@ -1,12 +1,11 @@
-export const TERMINAL_HOST_PROTOCOL_VERSION = 1
+export const TERMINAL_HOST_PROTOCOL_VERSION = 2
 
 export interface HostCreateOrAttachRequest {
   sessionId: string
   cols: number
   rows: number
   cwd: string
-  shell: { file: string; args: string[] }
-  startupCommand?: string
+  shell: { file: string; args: string[]; env?: Record<string, string> }
 }
 
 export interface HostDiagnostics {

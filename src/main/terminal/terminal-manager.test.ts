@@ -38,6 +38,7 @@ const ipc = vi.hoisted(() => ({
 vi.mock('electron', () => ({ ipcMain: { handle: ipc.handle } }))
 
 import { TerminalManager } from './terminal-manager'
+import { TERMINAL_HOST_PROTOCOL_VERSION } from './terminal-host-protocol'
 
 function project(id = 'project-1'): Project {
   return {
@@ -126,7 +127,7 @@ function createHarness(options?: {
     close: vi.fn(async () => undefined),
     shutdown: vi.fn(async () => undefined),
     diagnostics: vi.fn(async () => ({
-      protocolVersion: 1,
+      protocolVersion: TERMINAL_HOST_PROTOCOL_VERSION,
       processId: 9001,
       startedAt: 5_000,
       sessions: []
@@ -253,13 +254,16 @@ describe('TerminalManager', () => {
     expect(harness.host.createOrAttach).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session:session-1',
-        startupCommand: "& 'opencode'"
+        shell: expect.objectContaining({
+          args: expect.arrayContaining(['-NoExit', '-Command', "& 'opencode'"]),
+          env: {}
+        })
       })
     )
     expect(connected).toMatchObject({
       agentId: 'opencode',
       agentLabel: 'OpenCode',
-      agentResumed: false
+      agentResumeRequested: false
     })
     expect(harness.agentRuntime.onTerminalConnected).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -282,10 +286,16 @@ describe('TerminalManager', () => {
 
     expect(harness.host.createOrAttach).toHaveBeenCalledWith(
       expect.objectContaining({
-        startupCommand: "& 'opencode' '--session' 'ses_native-1'"
+        shell: expect.objectContaining({
+          args: expect.arrayContaining([
+            '-NoExit',
+            '-Command',
+            "& 'opencode' '--session' 'ses_native-1'"
+          ])
+        })
       })
     )
-    expect(connected).toMatchObject({ agentResumed: true })
+    expect(connected).toMatchObject({ agentResumeRequested: true })
 
     const attachedHarness = createHarness({
       sessionValue: session('ses_native-1'),
@@ -296,7 +306,7 @@ describe('TerminalManager', () => {
       cols: 80,
       rows: 24
     })
-    expect(attached).toMatchObject({ isNew: false, agentResumed: false })
+    expect(attached).toMatchObject({ isNew: false, agentResumeRequested: false })
     expect(attachedHarness.host.close).not.toHaveBeenCalled()
   })
 

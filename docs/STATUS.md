@@ -1,25 +1,25 @@
 # DevStation 当前状态
 
-DevStation 已完成 M4：OpenCode 与 Chrys 共用原生 TUI、会话恢复、真实状态事件和统一设置中心；Adapter 描述符、argv、引用、诊断和事件重放均已进入确定性门禁。下一步进入 M5 Git 与 Diff 评审。
+DevStation 已完成 M4：OpenCode 与 Chrys 共用原生 TUI、会话恢复、真实状态事件和统一设置中心；Adapter 的能力、设置、argv、引用、诊断和事件重放均已进入确定性门禁。下一步进入 M5 Git 与 Diff 评审。
 
 ## 当前能力
 
-| 能力         | 状态     | 当前边界                                                                |
-| ------------ | -------- | ----------------------------------------------------------------------- |
-| 桌面工作台   | 可用     | 主区单层；右栏跟随上下文；重启恢复入口、选中项、树展开和面板布局        |
-| 任务与项目   | 可用     | 任务 CRUD、状态、搜索、项目关联与 Git 目录校验                          |
-| 工作会话     | 可用     | 固定 `agentId`，保存结构化原生会话引用、当前运行代次与状态来源          |
-| SQLite       | 可用     | Schema v6；保存 Agent 事件回执与用户 Agent 设置，支持原子迁移与降级拒绝 |
-| PowerShell   | 可用     | AI 主区固定终端；输入、resize、有限快照、显式停止和退出原因反馈         |
-| PTY 热接回   | 可用     | 独立宿主持有 PTY；支持协议握手、诊断、断连反馈、应用重启接回和空闲回收  |
-| Agent 适配层 | 可用     | Registry、能力描述、结构化 argv、CLI 探测、运行服务、引用校验与契约门禁 |
-| Agent 设置   | 可用     | 可用性、启停、默认项、CLI 路径、登录终端与事件集成诊断                  |
-| OpenCode     | 可用     | 启动、恢复、只读会话发现、受管 Plugin 和真实状态事件均封装在 Adapter    |
-| Chrys        | 可用     | 原生 TUI、`-s` 恢复、受管 Hook、会话绑定及工作/等待状态均封装在 Adapter |
-| 工作流       | 展示占位 | 已有 AAW 流程和模板界面，但尚未连接 CLI、真实状态、产物与持久化         |
-| Agent 事件   | 可用     | OpenCode/Chrys 真实事件、原子文件、重放、坏文件隔离与旧运行拦截         |
-| Git Diff     | 未完成   | 只有仓库校验；状态、Diff 和评论尚未实现                                 |
-| Windows 交付 | 基础可用 | NSIS 可构建；打包态 PTY 接回与回收已验收，签名、升级和卸载留到 M7       |
+| 能力         | 状态     | 当前边界                                                                 |
+| ------------ | -------- | ------------------------------------------------------------------------ |
+| 桌面工作台   | 可用     | 主区单层；右栏跟随上下文；重启恢复入口、选中项、树展开和面板布局         |
+| 任务与项目   | 可用     | 任务 CRUD、状态、搜索、项目关联与 Git 目录校验                           |
+| 工作会话     | 可用     | 固定 `agentId`，保存结构化原生会话引用、当前运行代次与状态来源           |
+| SQLite       | 可用     | Schema v7；保存版本化 Agent 设置与事件回执，支持原子迁移与降级拒绝       |
+| PowerShell   | 可用     | AI 主区固定终端；Agent 启动接线不写入可见输入，支持输入、resize 与停止   |
+| PTY 热接回   | 可用     | 独立宿主持有 PTY；支持协议握手、诊断、断连反馈、应用重启接回和空闲回收   |
+| Agent 适配层 | 可用     | Registry、能力描述、结构化 argv、CLI 探测、运行服务、引用校验与契约门禁  |
+| Agent 设置   | 可用     | Schema 驱动字段和接入引导；启停、默认项、CLI、登录与事件集成由 Main 校验 |
+| OpenCode     | 可用     | 启动、恢复、只读会话发现、受管 Plugin 和真实状态事件均封装在 Adapter     |
+| Chrys        | 可用     | 原生 TUI、`-s` 恢复、受管 Hook、会话绑定及工作/等待状态均封装在 Adapter  |
+| 工作流       | 展示占位 | 已有 AAW 流程和模板界面，但尚未连接 CLI、真实状态、产物与持久化          |
+| Agent 事件   | 可用     | OpenCode/Chrys 真实事件、原子文件、重放、坏文件隔离与旧运行拦截          |
+| Git Diff     | 未完成   | 只有仓库校验；状态、Diff 和评论尚未实现                                  |
+| Windows 交付 | 基础可用 | NSIS 可构建；打包态 PTY 接回与回收已验收，签名、升级和卸载留到 M7        |
 
 ## 当前用户链路
 
@@ -56,12 +56,12 @@ flowchart LR
     Main --> Terminal
     Runtime -->|Prepared Agent 运行| Terminal
     Terminal -->|连接 / 脱离 / I/O| Host
-    Host -->|PowerShell 启动或恢复| Agent
+    Host -->|进程参数启动或恢复；私有环境仅在 spawn 注入| Agent
     Agent -.->|Plugin / Hook 事件| Bridge
     Bridge -->|原子事件文件| Inbox --> DB
 ```
 
-Renderer 不能提交 cwd、启动参数或环境变量；Adapter 生成结构化参数，经 Main 校验和 PowerShell 编码后交给终端。UI 卸载只执行 disconnect，只有用户显式结束才关闭 PTY。
+Renderer 不能提交 cwd、启动参数或环境变量；Adapter 生成结构化参数，经 Main 校验后作为 PowerShell 进程参数启动，私有环境变量直接注入 PTY 进程环境，不再写入可见终端输入。UI 卸载只执行 disconnect，只有用户显式结束才关闭 PTY。
 
 ## 主要风险
 

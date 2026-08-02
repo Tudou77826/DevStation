@@ -1,5 +1,6 @@
 import type { AgentAvailability, AgentCatalogEntry, AgentDescriptor } from '@shared/agent'
 import type { CodingAgentAdapter } from './adapter'
+import { validateSettingValue } from './settings-service'
 
 const SAFE_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
 const CAPABILITIES = [
@@ -16,6 +17,11 @@ const ACTION_KINDS = new Set([
   'integration-repair',
   'integration-disable'
 ])
+const INTEGRATION_ACTION_KINDS = [
+  'integration-enable',
+  'integration-repair',
+  'integration-disable'
+] as const
 
 export class AgentRegistry {
   private readonly adapters = new Map<string, CodingAgentAdapter>()
@@ -76,6 +82,9 @@ function validateAdapterContract(adapter: CodingAgentAdapter): void {
       throw new Error(`Invalid Coding Agent capability: ${descriptor.id}.${capability}`)
     }
   }
+  if (descriptor.capabilities.resume && !descriptor.capabilities.sessionIdentity) {
+    throw new Error(`Coding Agent resume has no session identity: ${descriptor.id}`)
+  }
   if (
     descriptor.settings === null ||
     typeof descriptor.settings !== 'object' ||
@@ -96,6 +105,34 @@ function validateAdapterContract(adapter: CodingAgentAdapter): void {
         `Invalid Coding Agent settings field: ${descriptor.id}.${field.key}`
       )
     }
+    if (field.kind === 'select') {
+      if (!Array.isArray(field.options) || field.options.length === 0) {
+        throw new Error(
+          `Missing Coding Agent setting options: ${descriptor.id}.${field.key}`
+        )
+      }
+      const optionValues = new Set<string>()
+      for (const option of field.options) {
+        requireText(option.value, `setting option for ${descriptor.id}.${field.key}`)
+        requireText(
+          option.label,
+          `setting option label for ${descriptor.id}.${field.key}`
+        )
+        if (optionValues.has(option.value)) {
+          throw new Error(
+            `Duplicate Coding Agent setting option: ${descriptor.id}.${field.key}`
+          )
+        }
+        optionValues.add(option.value)
+      }
+    } else if (field.options !== undefined) {
+      throw new Error(
+        `Unexpected Coding Agent setting options: ${descriptor.id}.${field.key}`
+      )
+    }
+    if (field.defaultValue !== undefined) {
+      validateSettingValue(field, field.defaultValue)
+    }
   }
 
   const actionIds = new Set<string>()
@@ -110,6 +147,35 @@ function validateAdapterContract(adapter: CodingAgentAdapter): void {
     if (action.kind === 'open-login' && adapter.buildLogin === undefined) {
       throw new Error(`Coding Agent login action has no implementation: ${descriptor.id}`)
     }
+  }
+  const integrationActions = new Set<string>(
+    descriptor.settings.actions
+      .map(({ kind }) => kind)
+      .filter((kind) => (INTEGRATION_ACTION_KINDS as readonly string[]).includes(kind))
+  )
+  if (integrationActions.size > 0 && adapter.managedIntegration === undefined) {
+    throw new Error(
+      `Coding Agent integration actions have no implementation: ${descriptor.id}`
+    )
+  }
+  if (adapter.managedIntegration !== undefined) {
+    if (!descriptor.capabilities.activityEvents) {
+      throw new Error(
+        `Coding Agent event integration has no event capability: ${descriptor.id}`
+      )
+    }
+    for (const kind of INTEGRATION_ACTION_KINDS) {
+      if (!integrationActions.has(kind)) {
+        throw new Error(
+          `Coding Agent event integration action is missing: ${descriptor.id}.${kind}`
+        )
+      }
+    }
+  }
+  if (adapter.sessionLocator !== undefined && !descriptor.capabilities.sessionIdentity) {
+    throw new Error(
+      `Coding Agent session locator has no identity capability: ${descriptor.id}`
+    )
   }
 
   if (!Array.isArray(descriptor.setupSteps)) {

@@ -8,7 +8,13 @@ import {
   SquareTerminal,
   Wrench
 } from 'lucide-react'
-import type { AgentCapability, AgentDiagnosticEntry } from '@shared/agent'
+import type {
+  AgentCapability,
+  AgentDiagnosticEntry,
+  AgentSettingAction,
+  AgentSettingField,
+  AgentSettingValue
+} from '@shared/agent'
 import type { RpcResponse } from '@shared/rpc'
 import { cn } from '@/lib/utils'
 import { useDataStore } from '@/store/data'
@@ -128,6 +134,31 @@ function AgentCard({
   const capabilities = Object.entries(descriptor.capabilities).filter(
     ([, value]) => value
   )
+  const actions = new Map(
+    descriptor.settings.actions.map((action) => [action.id, action])
+  )
+
+  function runDeclaredAction(action: AgentSettingAction): void {
+    void onRun(async () => {
+      if (action.kind === 'probe') return
+      if (action.kind === 'open-login') {
+        unwrap(
+          await window.devstation.rpc.invoke('agents.openLoginTerminal', {
+            agentId: descriptor.id
+          })
+        )
+        return
+      }
+      const integrationAction = integrationRpcAction(action.kind)
+      if (integrationAction === undefined) return
+      unwrap(
+        await window.devstation.rpc.invoke('agents.integrationAction', {
+          agentId: descriptor.id,
+          action: integrationAction
+        })
+      )
+    })
+  }
 
   return (
     <article
@@ -140,6 +171,7 @@ function AgentCard({
         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-[14px] font-semibold text-foreground">
           {descriptor.label.slice(0, 1).toUpperCase()}
         </div>
+
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="text-[14px] font-semibold text-foreground">
@@ -225,6 +257,22 @@ function AgentCard({
           </div>
         </div>
 
+        {descriptor.settings.fields.length > 0 && (
+          <div className="space-y-3 py-4">
+            <div className="text-[12px] font-medium text-foreground">Agent 设置</div>
+            {descriptor.settings.fields.map((field) => (
+              <AgentFieldControl
+                key={field.key}
+                agentId={descriptor.id}
+                field={field}
+                value={settings.values[field.key]}
+                busy={busy}
+                onRun={onRun}
+              />
+            ))}
+          </div>
+        )}
+
         {integration !== null && (
           <div className="grid gap-3 py-4 sm:grid-cols-[120px_1fr_auto] sm:items-center">
             <div className="text-[12px] font-medium text-foreground">事件集成</div>
@@ -267,12 +315,10 @@ function AgentCard({
                   type="button"
                   disabled={busy}
                   onClick={() =>
-                    void onRun(async () =>
-                      unwrap(
-                        await window.devstation.rpc.invoke('agents.openLoginTerminal', {
-                          agentId: descriptor.id
-                        })
-                      )
+                    runDeclaredAction(
+                      descriptor.settings.actions.find(
+                        ({ kind }) => kind === 'open-login'
+                      )!
                     )
                   }
                   className="inline-flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
@@ -301,8 +347,139 @@ function AgentCard({
             )}
           </div>
         </div>
+
+        {descriptor.setupSteps.length > 0 && (
+          <div className="space-y-2 py-4">
+            <div className="text-[12px] font-medium text-foreground">接入引导</div>
+            {descriptor.setupSteps.map((step, index) => {
+              const action =
+                step.actionId === undefined ? undefined : actions.get(step.actionId)
+              return (
+                <div
+                  key={step.id}
+                  className="flex items-start gap-3 rounded-lg border border-border/50 bg-card/45 px-3 py-2.5"
+                >
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-muted-foreground">
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-medium text-foreground">
+                      {step.title}
+                    </div>
+                    <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+                      {step.description}
+                    </p>
+                  </div>
+                  {action !== undefined && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => runDeclaredAction(action)}
+                      className="shrink-0 text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    >
+                      {action.label}
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </article>
+  )
+}
+
+function integrationRpcAction(
+  kind: AgentSettingAction['kind']
+): 'enable' | 'repair' | 'disable' | undefined {
+  if (kind === 'integration-enable') return 'enable'
+  if (kind === 'integration-repair') return 'repair'
+  if (kind === 'integration-disable') return 'disable'
+  return undefined
+}
+
+function AgentFieldControl({
+  agentId,
+  field,
+  value,
+  busy,
+  onRun
+}: {
+  agentId: string
+  field: AgentSettingField
+  value: AgentSettingValue | undefined
+  busy: boolean
+  onRun: (action: () => Promise<unknown>) => Promise<void>
+}): React.ReactElement {
+  const [draft, setDraft] = useState(typeof value === 'string' ? value : '')
+
+  useEffect(() => {
+    setDraft(typeof value === 'string' ? value : '')
+  }, [value])
+
+  const save = (next: AgentSettingValue | null): void => {
+    void onRun(async () =>
+      unwrap(
+        await window.devstation.rpc.invoke('agents.setSetting', {
+          agentId,
+          key: field.key,
+          value: next
+        })
+      )
+    )
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-[120px_1fr_auto] sm:items-center">
+      <div>
+        <div className="text-[11px] text-foreground/85">{field.label}</div>
+        {field.description !== undefined && (
+          <div className="mt-0.5 text-[10px] text-muted-foreground">
+            {field.description}
+          </div>
+        )}
+      </div>
+      {field.kind === 'boolean' ? (
+        <SettingsSwitch
+          checked={value === true}
+          ariaLabel={`${field.label}`}
+          onChange={(checked) => save(checked)}
+        />
+      ) : field.kind === 'select' ? (
+        <select
+          aria-label={field.label}
+          value={typeof value === 'string' ? value : ''}
+          disabled={busy}
+          onChange={(event) => save(event.target.value)}
+          className="rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] text-foreground outline-none"
+        >
+          {!field.required && <option value="">未设置</option>}
+          {field.options?.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          aria-label={field.label}
+          value={draft}
+          disabled={busy}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder={field.required ? '请输入绝对路径' : '可选绝对路径'}
+          className="rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-[11px] text-foreground outline-none"
+        />
+      )}
+      {field.kind === 'path' && (
+        <ActionButton
+          label="保存"
+          icon={Check}
+          disabled={busy || draft === (typeof value === 'string' ? value : '')}
+          onClick={() => save(draft === '' && !field.required ? null : draft)}
+        />
+      )}
+    </div>
   )
 }
 

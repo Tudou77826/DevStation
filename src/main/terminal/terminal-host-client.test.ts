@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TerminalHostClient, terminalHostEndpoint } from './terminal-host-client'
 import type { HostRequestEnvelope } from './terminal-host-protocol'
+import { TERMINAL_HOST_PROTOCOL_VERSION } from './terminal-host-protocol'
 
 const cleanups: Array<() => void> = []
 
@@ -34,7 +35,7 @@ async function fakeHost(
                 id: envelope.id,
                 ok: true,
                 result: {
-                  protocolVersion: 1,
+                  protocolVersion: TERMINAL_HOST_PROTOCOL_VERSION,
                   processId: 123,
                   startedAt: 1,
                   sessions: []
@@ -96,7 +97,7 @@ describe('TerminalHostClient', () => {
     )
     expect(state).toHaveBeenCalledWith({ state: 'connected' })
     await expect(client.diagnostics()).resolves.toMatchObject({
-      protocolVersion: 1,
+      protocolVersion: TERMINAL_HOST_PROTOCOL_VERSION,
       processId: 123
     })
 

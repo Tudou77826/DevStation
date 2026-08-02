@@ -7,7 +7,7 @@
 import type { Database } from './database'
 
 /** Current schema version. Bump when adding migrations. */
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 const CREATE_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS agent_settings (
   integration_enabled INTEGER NOT NULL DEFAULT 1 CHECK(integration_enabled IN (0, 1)),
   executable_path TEXT,
   is_default      INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1)),
+  settings_version INTEGER NOT NULL DEFAULT 1 CHECK(settings_version >= 1),
+  settings_json   TEXT NOT NULL DEFAULT '{}',
   updated_at      INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_settings_default
@@ -173,10 +175,18 @@ CREATE TABLE agent_settings (
   integration_enabled INTEGER NOT NULL DEFAULT 1 CHECK(integration_enabled IN (0, 1)),
   executable_path TEXT,
   is_default      INTEGER NOT NULL DEFAULT 0 CHECK(is_default IN (0, 1)),
+  settings_version INTEGER NOT NULL DEFAULT 1 CHECK(settings_version >= 1),
+  settings_json   TEXT NOT NULL DEFAULT '{}',
   updated_at      INTEGER NOT NULL
 );
 CREATE UNIQUE INDEX idx_agent_settings_default
   ON agent_settings(is_default) WHERE is_default = 1;
+`
+
+const VERSIONED_AGENT_SETTINGS_SQL = `
+ALTER TABLE agent_settings ADD COLUMN settings_version INTEGER NOT NULL DEFAULT 1
+  CHECK(settings_version >= 1);
+ALTER TABLE agent_settings ADD COLUMN settings_json TEXT NOT NULL DEFAULT '{}';
 `
 
 /** Create the initial tables/indexes. Called only from the migration transaction. */
@@ -209,6 +219,7 @@ export function migrate(db: Database): void {
     if (storedVersion < 4 && storedVersion >= 1) db.exec(OPEN_AGENT_SCHEMA_SQL)
     if (storedVersion < 5 && storedVersion >= 1) db.exec(AGENT_EVENT_INBOX_SQL)
     if (storedVersion < 6 && storedVersion >= 1) db.exec(AGENT_SETTINGS_SQL)
+    if (storedVersion < 7 && storedVersion >= 6) db.exec(VERSIONED_AGENT_SETTINGS_SQL)
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   })
 }

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { CHRYS_DESCRIPTOR, ChrysAdapter } from './chrys-adapter'
 
 describe('ChrysAdapter', () => {
-  const context = { cwd: 'C:\\repo', devStationSessionId: 's1', agentRunId: 'r1' }
+  const context = {
+    cwd: 'C:\\repo',
+    devStationSessionId: 's1',
+    agentRunId: 'r1',
+    settings: {}
+  }
 
   it('launches the native TUI and resumes a validated native session', () => {
     const adapter = new ChrysAdapter()

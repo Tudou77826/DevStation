@@ -7,7 +7,12 @@ describe('OpenCodeAdapter', () => {
       snapshot: vi.fn(() => new Set<string>()),
       findCreatedSession: vi.fn(() => null)
     })
-    const context = { cwd: 'C:\\repo', devStationSessionId: 's1', agentRunId: 'r1' }
+    const context = {
+      cwd: 'C:\\repo',
+      devStationSessionId: 's1',
+      agentRunId: 'r1',
+      settings: {}
+    }
     expect(OPEN_CODE_DESCRIPTOR.settings.version).toBe(2)
     expect(OPEN_CODE_DESCRIPTOR.capabilities.activityEvents).toBe(true)
     expect(adapter.buildLaunch(context)).toEqual({
@@ -35,7 +40,7 @@ describe('OpenCodeAdapter', () => {
     expect(adapter.validateSessionRef({ kind: 'other', value: 'ses_valid' })).toBeNull()
     expect(
       adapter.buildResume(
-        { cwd: '.', devStationSessionId: 's', agentRunId: 'r' },
+        { cwd: '.', devStationSessionId: 's', agentRunId: 'r', settings: {} },
         {
           kind: 'session-id',
           value: '--help'

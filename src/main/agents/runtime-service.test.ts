@@ -29,7 +29,16 @@ function harness(
     ref?: AgentSessionRef | null
     agentId?: string
     eventBridge?: Pick<ManagedEventBridge, 'enrichLaunchSpec'>
-    settings?: { enabled: boolean; executablePath: string | null }
+    activityEvents?: boolean
+    resume?: boolean
+    sessionIdentity?: boolean
+    buildResumeNull?: boolean
+    settings?: {
+      enabled: boolean
+      integrationEnabled: boolean
+      executablePath: string | null
+      values: Record<string, string | boolean>
+    }
   } = {}
 ) {
   const sessionValue = session(options.ref ?? null, options.agentId ?? 'test-agent')
@@ -43,15 +52,15 @@ function harness(
       label: 'Test Agent',
       description: '',
       capabilities: {
-        resume: true,
-        sessionIdentity: true,
-        activityEvents: false,
+        resume: options.resume ?? true,
+        sessionIdentity: options.sessionIdentity ?? true,
+        activityEvents: options.activityEvents ?? false,
         transcript: false
       },
       settings: { version: 1, fields: [], actions: [] },
       setupSteps: []
     },
-    sessionLocator: locator,
+    ...(options.sessionIdentity === false ? {} : { sessionLocator: locator }),
     probe: vi.fn(async () => ({
       status: 'available' as const,
       executable: 'test-agent',
@@ -59,11 +68,15 @@ function harness(
       message: null
     })),
     buildLaunch: vi.fn(() => ({ executable: 'test-agent', args: [], env: {} })),
-    buildResume: vi.fn((_context, ref) => ({
-      executable: 'test-agent',
-      args: ['resume', ref.value],
-      env: {}
-    })),
+    buildResume: vi.fn((_context, ref) =>
+      options.buildResumeNull === true
+        ? null
+        : {
+            executable: 'test-agent',
+            args: ['resume', ref.value],
+            env: {}
+          }
+    ),
     validateSessionRef: vi.fn((raw) => {
       if (raw === null || typeof raw !== 'object') return null
       const record = raw as Record<string, unknown>
@@ -156,7 +169,7 @@ describe('AgentRuntimeService', () => {
     const eventBridge = {
       enrichLaunchSpec: vi.fn((spec) => ({ ...spec, env: { EVENT_BRIDGE: 'ready' } }))
     }
-    const h = harness({ eventBridge })
+    const h = harness({ eventBridge, activityEvents: true })
     const prepared = h.runtime.prepareSession('session-1', 'C:\\repo')
     expect(eventBridge.enrichLaunchSpec).toHaveBeenCalledWith(
       { executable: 'test-agent', args: [], env: {} },
@@ -182,20 +195,74 @@ describe('AgentRuntimeService', () => {
     expect(invalid.adapter.buildLaunch).not.toHaveBeenCalled()
   })
 
+  it('refuses stored sessions when resume capabilities or implementations are absent', () => {
+    const ref = { kind: 'session-id', value: 'native-1' }
+    const noIdentity = harness({ ref, resume: false, sessionIdentity: false })
+    expect(() => noIdentity.runtime.prepareSession('session-1', 'C:\\repo')).toThrow(
+      'does not support native session identity'
+    )
+
+    const noResume = harness({ ref, resume: false })
+    expect(() => noResume.runtime.prepareSession('session-1', 'C:\\repo')).toThrow(
+      'does not support session resume'
+    )
+
+    const noCommand = harness({ ref, buildResumeNull: true })
+    expect(() => noCommand.runtime.prepareSession('session-1', 'C:\\repo')).toThrow(
+      'could not build a resume command'
+    )
+    expect(noCommand.adapter.buildLaunch).not.toHaveBeenCalled()
+  })
+
   it('uses the configured executable for the real launch and blocks a disabled Agent', () => {
     const configured = harness({
-      settings: { enabled: true, executablePath: 'D:\\venv\\chrys.exe' }
+      settings: {
+        enabled: true,
+        integrationEnabled: true,
+        executablePath: 'D:\\venv\\chrys.exe',
+        values: { mode: 'safe' }
+      }
     })
     configured.runtime.prepareSession('session-1', 'C:\\repo')
     expect(configured.adapter.buildLaunch).toHaveBeenCalledWith(
-      expect.objectContaining({ executablePath: 'D:\\venv\\chrys.exe' })
+      expect.objectContaining({
+        executablePath: 'D:\\venv\\chrys.exe',
+        settings: { mode: 'safe' }
+      })
     )
 
-    const disabled = harness({ settings: { enabled: false, executablePath: null } })
+    const disabled = harness({
+      settings: {
+        enabled: false,
+        integrationEnabled: true,
+        executablePath: null,
+        values: {}
+      }
+    })
     expect(() => disabled.runtime.prepareSession('session-1', 'C:\\repo')).toThrow(
       'Coding Agent is disabled'
     )
     expect(disabled.adapter.buildLaunch).not.toHaveBeenCalled()
+  })
+
+  it('does not inject the event bridge when events or their user setting are disabled', () => {
+    const eventBridge = {
+      enrichLaunchSpec: vi.fn((spec) => ({ ...spec, env: { EVENT_BRIDGE: 'ready' } }))
+    }
+    harness({ eventBridge }).runtime.prepareSession('session-1', 'C:\\repo')
+    expect(eventBridge.enrichLaunchSpec).not.toHaveBeenCalled()
+
+    harness({
+      eventBridge,
+      activityEvents: true,
+      settings: {
+        enabled: true,
+        integrationEnabled: false,
+        executablePath: null,
+        values: {}
+      }
+    }).runtime.prepareSession('session-1', 'C:\\repo')
+    expect(eventBridge.enrichLaunchSpec).not.toHaveBeenCalled()
   })
 
   it('reopens discovery after the initial window when later terminal activity arrives', async () => {

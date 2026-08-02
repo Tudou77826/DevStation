@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import type { AgentLaunchSpec, AgentSessionRef } from '@shared/agent'
+import type { AgentLaunchSpec, AgentSessionRef, AgentSettingValue } from '@shared/agent'
 import type { Session } from '@shared/domain'
 import type { SessionRepo } from '../db/repositories'
 import type { AgentSessionLocator, CodingAgentAdapter } from './adapter'
-import { encodePowerShellInvocation } from './agent-launch'
+import { encodePowerShellCommand } from './agent-launch'
 import type { AgentRegistry } from './registry'
 import type { ManagedEventBridge } from './managed-event-bridge'
 
@@ -17,7 +17,12 @@ interface SessionRepository {
 }
 
 interface AgentSettingsRepository {
-  effective(agentId: string): { enabled: boolean; executablePath: string | null }
+  effective(agentId: string): {
+    enabled: boolean
+    integrationEnabled: boolean
+    executablePath: string | null
+    values: Readonly<Record<string, AgentSettingValue>>
+  }
 }
 
 interface PendingAgentDiscovery {
@@ -78,25 +83,38 @@ export class AgentRuntimeService {
     const adapter = this.options.registry.require(session.agentId)
     const settings = this.options.agentSettings?.effective(session.agentId)
     if (settings?.enabled === false) throw new Error('Coding Agent is disabled')
+    const capabilities = adapter.descriptor.capabilities
+    if (session.agentSessionRef !== null && !capabilities.sessionIdentity) {
+      throw new Error('Coding Agent does not support native session identity')
+    }
     const ref = this.validateStoredRef(adapter, session.agentSessionRef)
     const context = {
       cwd,
       devStationSessionId: session.id,
       agentRunId: this.createRunId(),
+      settings: settings?.values ?? {},
       ...(settings?.executablePath === null || settings?.executablePath === undefined
         ? {}
         : { executablePath: settings.executablePath })
     }
+    if (ref !== null && !capabilities.resume) {
+      throw new Error('Coding Agent does not support session resume')
+    }
     const resume = ref === null ? null : adapter.buildResume(context, ref)
+    if (ref !== null && resume === null) {
+      throw new Error('Coding Agent could not build a resume command')
+    }
     const adapterLaunchSpec = resume ?? adapter.buildLaunch(context)
     const launchSpec =
-      this.options.eventBridge?.enrichLaunchSpec(adapterLaunchSpec, {
-        agentId: adapter.descriptor.id,
-        devStationSessionId: session.id,
-        agentRunId: context.agentRunId
-      }) ?? adapterLaunchSpec
+      capabilities.activityEvents && settings?.integrationEnabled !== false
+        ? (this.options.eventBridge?.enrichLaunchSpec(adapterLaunchSpec, {
+            agentId: adapter.descriptor.id,
+            devStationSessionId: session.id,
+            agentRunId: context.agentRunId
+          }) ?? adapterLaunchSpec)
+        : adapterLaunchSpec
     const discoverySnapshot =
-      ref === null && adapter.sessionLocator !== undefined
+      ref === null && capabilities.sessionIdentity && adapter.sessionLocator !== undefined
         ? this.safeSnapshot(adapter.sessionLocator, cwd)
         : new Set<string>()
     return {
@@ -106,7 +124,7 @@ export class AgentRuntimeService {
       agentRunId: context.agentRunId,
       sessionRef: ref,
       launchSpec,
-      startupCommand: encodePowerShellInvocation(launchSpec),
+      startupCommand: encodePowerShellCommand(launchSpec),
       resumeRequested: resume !== null,
       discoverySnapshot
     }

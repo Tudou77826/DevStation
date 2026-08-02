@@ -87,9 +87,13 @@ describe('TerminalPane', () => {
         isNew: false,
         agentId: request.context.type === 'session' ? 'opencode' : null,
         agentLabel: request.context.type === 'session' ? 'OpenCode' : null,
-        agentResumed: false,
+        agentResumeRequested: false,
         snapshot: 'restored prompt> ',
-        host: { protocolVersion: 1, processId: 9001, startedAt: 1 }
+        host: {
+          protocolVersion: 2,
+          processId: 9001,
+          startedAt: 1
+        }
       })),
       disconnect: vi.fn(async () => undefined),
       write: vi.fn(async () => undefined),
@@ -139,7 +143,7 @@ describe('TerminalPane', () => {
         .getByText(/PID 99/)
         .closest('[title]')
         ?.getAttribute('title')
-    ).toBe('Terminal Host PID 9001 · Protocol v1')
+    ).toBe('Terminal Host PID 9001 · Protocol v2')
   })
 
   it('detaches on navigation without closing the process, but honors explicit stop', async () => {

@@ -23,6 +23,10 @@ SSH、远程运行、worktree、外部任务平台、自动提交、工作流可
 | M4.1     | 通用 Agent 适配层、开放会话绑定 Schema、OpenCode 迁移与 CLI 探测      |
 | M4.2     | 跨重启事件收件箱、幂等回执、乱序保护和旧运行隔离                      |
 | M4.3     | OpenCode 受管 Plugin、真实状态事件、原生会话绑定和界面实时刷新        |
+| M4.4     | Chrys 原生启动/恢复、受管 Hook、真实状态事件与第二 Agent 选择         |
+| M4.5     | 通用 Coding Agent 设置中心、会话 UI、搜索筛选与故障诊断               |
+| M4.6     | Adapter 契约、事件重放、多 Agent 确定性 E2E 与真实 CLI Smoke 门禁     |
+| M4.7     | 能力/设置契约收口、恢复语义修正，以及不可见的 Agent 启动接线          |
 
 当前实现边界见[当前状态](./STATUS.md)，代码入口见[代码地图](./CODE_MAP.md)。
 
@@ -187,6 +191,17 @@ M4 不接入任何 Agent 的程序化对话协议，也不替换原生 TUI。当
 - `[L3]` E2E 使用可控测试适配器验证多 Agent UI；真实 OpenCode/Chrys smoke 保持显式启用。
 
 `test:terminal` 继续只验证真实 PTY，不依赖任何 Agent CLI；确定性门禁不要求开发机登录供应商账户。
+
+### M4.7：适配契约收口
+
+状态：已完成。运行时只执行 Adapter 明确声明的恢复、会话识别和事件能力；事件集成开关真实控制 Bridge 注入。版本化设置 Schema、字段和引导步骤已贯通 SQLite、Main 校验与通用 UI；确定性 E2E 同时覆盖两个可选择 Agent。
+
+- `[L4]` Registry 拒绝能力、Locator、Managed Integration、动作或设置默认值互相矛盾的 Adapter。
+- `[L4]` SQLite v7 保存版本化设置值；升级时过滤不兼容值但保留未知原始字段，支持 Adapter 升降级。
+- `[L3]` 冷恢复只显示“已发起恢复”，不把启动命令成功误报为原生会话恢复成功。
+- `[L4]` Agent 命令通过 PowerShell 进程参数启动，Bridge 路径、令牌和运行标识只注入 PTY 环境，不出现在终端输入历史。
+
+验收：关闭事件集成后新运行不再收到 Bridge 环境；缺失恢复能力或实现时明确失败；设置值只能按 Adapter Schema 写入；终端不显示 `$env:DEVSTATION_*` 启动接线。
 
 M4 完成标准：OpenCode 与 Chrys 均可通过设置中心完成启用、诊断、新建和恢复；用户能找到目标会话并判断状态可信度；Electron 重启不丢失当前运行和最新 Agent 状态；增加第三个内置 Agent 时无需修改终端核心、数据库状态模型或设置/会话 UI 的供应商逻辑。
 

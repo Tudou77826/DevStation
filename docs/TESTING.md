@@ -37,7 +37,9 @@
 - 新 Agent Session 只绑定当前目录、本次启动后出现的供应商顶层会话。
 - 已保存且通过 Adapter 校验的原生引用才能进入冷恢复 argv；无效引用不得降级为新会话。
 - Adapter 只能返回结构化 executable、args 和 env；所有值由 Main 统一编码，不能拼接 Shell。
+- Agent 命令通过 PowerShell 启动参数执行，私有 env 只在 PTY spawn 时注入；终端快照和输入历史不得出现 `$env:DEVSTATION_*` 或事件令牌。
 - Descriptor 和设置 Schema 必须通过 Registry 的版本、能力、动作白名单及引用完整性校验后才能暴露给 UI。
+- Runtime 必须执行能力声明和事件集成开关；“已发起恢复”只表示恢复 argv 已启动，不代表供应商确认恢复成功。
 - 底层集成诊断的路径和错误原文不得跨 RPC 暴露；用户只接收状态对应的受控提示。
 - Agent 事件先原子落盘再归约；重复、乱序和旧 `agentRunId` 事件不得回退当前状态。
 - Electron 关闭期间的事件可在下次启动重放，事件回执跨数据库重启仍能去重；坏文件被隔离且不能阻塞终端或其他有效事件。
@@ -45,6 +47,7 @@
 - Chrys 受管 Hook 只能增量维护 DevStation 标识项；用户 Hook、注释和同名冲突必须保留。
 - Chrys 的会话、工作和结束状态必须来自生命周期 Hook；等待与恢复必须来自匹配 `ask_user` 的工具 Hook，并经同一事件 Bridge 落盘。
 - 安装和卸载只能处理带 DevStation 标识的文件；同路径的用户文件必须保留并报告冲突。
+- 确定性 E2E 至少提供两个可选择 Test Agent，验证通用设置进入 Adapter，且不依赖供应商账号。
 - Electron 重启后可接回同一个 PowerShell PID，并重建可见终端内容。
 - 宿主连接先完成协议版本握手；断连后旧的 Renderer 所有权立即失效。
 - 主动结束能把真实退出结果反馈到 UI；没有 PTY 和客户端时宿主自动退出。

@@ -64,6 +64,7 @@ describe('Coding Agent adapter contract', () => {
         cwd: 'C:\\repo',
         devStationSessionId: 'session-1',
         agentRunId: 'run-1',
+        settings: {},
         executablePath
       })
 
@@ -85,6 +86,7 @@ describe('Coding Agent adapter contract', () => {
         cwd: 'C:\\repo',
         devStationSessionId: 'session-1',
         agentRunId: 'run-1',
+        settings: {},
         executablePath: 'C:\\tools\\agent.exe'
       }
 

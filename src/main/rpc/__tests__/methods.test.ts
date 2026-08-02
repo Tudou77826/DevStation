@@ -50,6 +50,8 @@ function repositories() {
         integrationEnabled: true,
         executablePath: null,
         isDefault: agentId === 'opencode',
+        schemaVersion: 1,
+        values: {},
         updatedAt: null
       })),
       setExecutablePath: vi.fn(),
@@ -76,6 +78,10 @@ function context(
       get: vi.fn().mockReturnValue({}),
       require: vi.fn()
     } as unknown as RpcContext['agentRegistry'],
+    agentSettings: {
+      effective: vi.fn((agentId: string) => repos.agentSettings.effective(agentId)),
+      setValue: vi.fn((agentId: string) => repos.agentSettings.effective(agentId))
+    } as unknown as RpcContext['agentSettings'],
     sender
   }
 }
@@ -108,6 +114,7 @@ describe('RPC method registry', () => {
       'agents.clearExecutable',
       'agents.setEnabled',
       'agents.setDefault',
+      'agents.setSetting',
       'agents.openLoginTerminal',
       'agents.integrationAction',
       'tasks.list',
@@ -169,6 +176,8 @@ describe('RPC method registry', () => {
         integrationEnabled: true,
         executablePath: agentId === 'chrys' ? 'D:\\chrys.exe' : null,
         isDefault: agentId === 'chrys',
+        schemaVersion: 1,
+        values: {},
         updatedAt: null
       })
     )
@@ -268,6 +277,8 @@ describe('RPC method registry', () => {
       integrationEnabled: true,
       executablePath: 'D:\\tools\\chrys.exe',
       isDefault: false,
+      schemaVersion: 1,
+      values: {},
       updatedAt: 1
     })
 
@@ -321,9 +332,7 @@ describe('RPC method registry', () => {
 
     await expect(
       call('agents.pickExecutable', { agentId: 'chrys' }, ctx)
-    ).resolves.toEqual({
-      agentId: 'chrys'
-    })
+    ).resolves.toMatchObject({ agentId: 'chrys' })
     expect(repos.agentSettings.setExecutablePath).toHaveBeenCalledWith(
       'chrys',
       executablePath
@@ -366,19 +375,15 @@ describe('RPC method registry', () => {
   it('persists generic Agent enablement, default and executable reset actions', async () => {
     const repos = repositories()
     const ctx = context(repos)
-    repos.agentSettings.setExecutablePath.mockReturnValue({ action: 'path' })
-    repos.agentSettings.setEnabled.mockReturnValue({ action: 'enabled' })
-    repos.agentSettings.setDefault.mockReturnValue({ action: 'default' })
-
     await expect(
       call('agents.clearExecutable', { agentId: 'chrys' }, ctx)
-    ).resolves.toEqual({ action: 'path' })
+    ).resolves.toMatchObject({ agentId: 'chrys', executablePath: null })
     await expect(
       call('agents.setEnabled', { agentId: 'chrys', enabled: false }, ctx)
-    ).resolves.toEqual({ action: 'enabled' })
-    await expect(call('agents.setDefault', { agentId: 'chrys' }, ctx)).resolves.toEqual({
-      action: 'default'
-    })
+    ).resolves.toMatchObject({ agentId: 'chrys' })
+    await expect(
+      call('agents.setDefault', { agentId: 'chrys' }, ctx)
+    ).resolves.toMatchObject({ agentId: 'chrys' })
     expect(repos.agentSettings.setExecutablePath).toHaveBeenCalledWith('chrys', null)
     expect(repos.agentSettings.setEnabled).toHaveBeenCalledWith('chrys', false)
     expect(repos.agentSettings.setDefault).toHaveBeenCalledWith('chrys')
@@ -393,6 +398,48 @@ describe('RPC method registry', () => {
     await expect(
       call('agents.setDefault', { agentId: 'missing' }, ctx)
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('delegates adapter-defined setting values to the validated settings service', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    vi.mocked(ctx.agentSettings.setValue).mockReturnValue({
+      agentId: 'chrys',
+      enabled: true,
+      integrationEnabled: true,
+      executablePath: null,
+      isDefault: false,
+      schemaVersion: 2,
+      values: { 'response-mode': 'concise' },
+      updatedAt: 1
+    })
+
+    await expect(
+      call(
+        'agents.setSetting',
+        { agentId: 'chrys', key: 'response-mode', value: 'concise' },
+        ctx
+      )
+    ).resolves.toMatchObject({ values: { 'response-mode': 'concise' } })
+    expect(ctx.agentSettings.setValue).toHaveBeenCalledWith(
+      'chrys',
+      'response-mode',
+      'concise'
+    )
+
+    vi.mocked(ctx.agentSettings.setValue).mockImplementationOnce(() => {
+      throw new Error('Unsupported setting option: response-mode')
+    })
+    await expect(
+      call(
+        'agents.setSetting',
+        { agentId: 'chrys', key: 'response-mode', value: 'unsafe' },
+        ctx
+      )
+    ).rejects.toMatchObject({
+      code: 'VALIDATION',
+      message: 'Unsupported setting option: response-mode'
+    })
   })
 
   it('keeps integration enablement independent and records disable even after uninstall', async () => {
@@ -614,6 +661,8 @@ describe('RPC method registry', () => {
         integrationEnabled: true,
         executablePath: null,
         isDefault: agentId === 'chrys',
+        schemaVersion: 1,
+        values: {},
         updatedAt: null
       })
     )
@@ -630,6 +679,8 @@ describe('RPC method registry', () => {
         integrationEnabled: true,
         executablePath: null,
         isDefault: false,
+        schemaVersion: 1,
+        values: {},
         updatedAt: null
       })
     )
