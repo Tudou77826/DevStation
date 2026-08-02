@@ -52,15 +52,21 @@ test('Coding Agent 设置可诊断并显式启停事件集成', async () => {
     await page.getByRole('button', { name: /李工/ }).click()
     await page.getByRole('menuitem', { name: 'Agent 设置' }).click()
     await expect(page.getByRole('heading', { name: 'Coding Agent' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'OpenCode' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Test Agent' })).toBeVisible()
+    const testAgentCard = page.locator('article').filter({
+      has: page.getByRole('heading', { name: 'Test Agent' })
+    })
     await expect(
-      page.getByText('检测通过，后续新建和恢复会话将使用此程序。')
+      testAgentCard.getByText('检测通过，后续新建和恢复会话将使用此程序。')
     ).toBeVisible()
 
-    await page.getByRole('button', { name: '停用' }).first().click()
-    await expect(page.getByText('已停用').first()).toBeVisible()
-    await page.getByRole('button', { name: '启用' }).first().click()
-    await expect(page.getByText('已接入').first()).toBeVisible()
+    const openCodeCard = page.locator('article').filter({
+      has: page.getByRole('heading', { name: 'OpenCode' })
+    })
+    await openCodeCard.getByRole('button', { name: '停用' }).click()
+    await expect(openCodeCard.getByText('已停用')).toBeVisible()
+    await openCodeCard.getByRole('button', { name: '启用' }).click()
+    await expect(openCodeCard.getByText('已接入')).toBeVisible()
   } finally {
     await closeQuietly(app)
     await rm(profile, { recursive: true, force: true })

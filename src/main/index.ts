@@ -9,6 +9,8 @@ import { OpenCodeAdapter } from './agents/opencode-adapter'
 import { OpenCodeManagedIntegration } from './agents/opencode-managed-integration'
 import { ChrysAdapter } from './agents/chrys-adapter'
 import { ChrysManagedIntegration } from './agents/chrys-managed-integration'
+import { E2ETestAgentAdapter } from './agents/e2e-test-adapter'
+import type { CodingAgentAdapter } from './agents/adapter'
 import { AgentRegistry } from './agents/registry'
 import { AgentRuntimeService } from './agents/runtime-service'
 import { ManagedEventBridge } from './agents/managed-event-bridge'
@@ -73,6 +75,7 @@ function applyWindowChrome(window: BrowserWindow, theme: 'dark' | 'light'): void
   type OverlayCapable = BrowserWindow & {
     setTitleBarOverlay?: (opts: { color: string; symbolColor: string }) => void
   }
+
   const overlay = (window as OverlayCapable).setTitleBarOverlay
   if (typeof overlay === 'function') {
     try {
@@ -194,6 +197,10 @@ void app.whenReady().then(() => {
     return
   }
 
+  if (process.env['DEVSTATION_E2E'] === '1') {
+    repositories.agentSettings.setDefault('test-agent')
+  }
+
   // 2. Build the provider-neutral Agent catalog before exposing RPC so session
   // creation can validate the selected adapter at the Main boundary.
   const isolateExternalIntegrations =
@@ -219,10 +226,12 @@ void app.whenReady().then(() => {
       console.warn(`[DevStation] ${label} event integration unavailable:`, diagnostic)
     }
   }
-  const agentRegistry = new AgentRegistry([
+  const adapters: CodingAgentAdapter[] = [
     new OpenCodeAdapter(new OpenCodeSessionLocator(), openCodeIntegration),
     new ChrysAdapter(chrysIntegration)
-  ])
+  ]
+  if (process.env['DEVSTATION_E2E'] === '1') adapters.push(new E2ETestAgentAdapter())
+  const agentRegistry = new AgentRegistry(adapters)
 
   // 3. RPC dispatcher on a single channel, sender-bound context.
   const rpcRegistry = buildRegistry()
