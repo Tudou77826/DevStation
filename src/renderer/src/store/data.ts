@@ -3,6 +3,7 @@
 // Components read lists from here and call mutators; mutators refresh state.
 import { create } from 'zustand'
 import type { Project, Session, Task, TaskStatus } from '@shared/domain'
+import type { AgentCatalogEntry } from '@shared/agent'
 import type { RpcResponse, RpcError } from '@shared/rpc'
 
 // RPC helper: unwraps the envelope, throwing RpcError on failure so callers can
@@ -27,6 +28,7 @@ function unwrap<T>(res: RpcResponse<T>): T {
 }
 
 interface DataState {
+  agents: AgentCatalogEntry[]
   tasks: Task[]
   projects: Project[]
   sessionsByTask: Record<string, Session[]>
@@ -36,6 +38,7 @@ interface DataState {
   error: string | null
 
   loadAll: () => Promise<void>
+  loadAgents: () => Promise<AgentCatalogEntry[]>
   loadTasks: (filter?: {
     status?: TaskStatus
     projectId?: string
@@ -58,7 +61,7 @@ interface DataState {
 
   loadSessionsByTask: (taskId: string) => Promise<Session[]>
   loadSessionsByProject: (projectId: string) => Promise<Session[]>
-  createSessionFromTask: (taskId: string) => Promise<Session | null>
+  createSessionFromTask: (taskId: string, agentId?: string) => Promise<Session | null>
   touchSession: (id: string) => Promise<void>
   applySessionUpdate: (session: Session) => void
 
@@ -67,6 +70,7 @@ interface DataState {
 }
 
 export const useDataStore = create<DataState>((set, get) => ({
+  agents: [],
   tasks: [],
   projects: [],
   sessionsByTask: {},
@@ -77,13 +81,25 @@ export const useDataStore = create<DataState>((set, get) => ({
   async loadAll() {
     set({ loading: true, error: null })
     try {
-      const [tasks, projects] = await Promise.all([
+      const [tasks, projects, agents] = await Promise.all([
         unwrap(await rpc.invoke('tasks.list', {})),
-        unwrap(await rpc.invoke('projects.list', {}))
+        unwrap(await rpc.invoke('projects.list', {})),
+        unwrap(await rpc.invoke('agents.list', {}))
       ])
-      set({ tasks, projects, loading: false })
+      set({ tasks, projects, agents, loading: false })
     } catch (e) {
       set({ loading: false, error: get().errorMessage(e) })
+    }
+  },
+
+  async loadAgents() {
+    try {
+      const agents = unwrap(await rpc.invoke('agents.list', {}))
+      set({ agents, error: null })
+      return agents
+    } catch (e) {
+      set({ error: get().errorMessage(e) })
+      return get().agents
     }
   },
 
@@ -223,10 +239,10 @@ export const useDataStore = create<DataState>((set, get) => ({
     return sessions
   },
 
-  async createSessionFromTask(taskId) {
+  async createSessionFromTask(taskId, agentId) {
     try {
       const session = await unwrap(
-        await rpc.invoke('sessions.createFromTask', { taskId })
+        await rpc.invoke('sessions.createFromTask', { taskId, agentId })
       )
       await get().loadSessionsByTask(taskId)
       if (session.projectId !== null && get().sessionsByProject[session.projectId]) {

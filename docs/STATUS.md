@@ -1,6 +1,6 @@
 # DevStation 当前状态
 
-DevStation 已完成 M4.3：OpenCode 通过受管 Plugin 上报真实会话与运行状态，事件落库后会实时刷新界面。下一步接入 Claude Code；Agent 设置与诊断 UI、Diff 评审仍未完成。
+DevStation 已完成 M4.4：OpenCode 与 Chrys 均已接入原生 TUI、会话恢复和真实状态事件，创建会话时可选择 Agent。Chrys 实机 smoke 已验证 Session ID 绑定和 `-s` 冷恢复。下一步建设统一设置与诊断 UI；Diff 评审仍未完成。
 
 ## 当前能力
 
@@ -14,8 +14,9 @@ DevStation 已完成 M4.3：OpenCode 通过受管 Plugin 上报真实会话与�
 | PTY 热接回   | 可用     | 独立宿主持有 PTY；支持协议握手、诊断、断连反馈、应用重启接回和空闲回收  |
 | Agent 适配层 | 基础可用 | Registry、能力描述、结构化 argv、CLI 探测、运行服务和会话引用校验       |
 | OpenCode     | 可用     | 启动、恢复、只读会话发现、受管 Plugin 和真实状态事件均封装在 Adapter    |
+| Chrys        | 可用     | 原生 TUI、`-s` 恢复、受管 Hook、会话绑定及工作/等待状态均封装在 Adapter |
 | 工作流       | 展示占位 | 已有 AAW 流程和模板界面，但尚未连接 CLI、真实状态、产物与持久化         |
-| Agent 事件   | 可用     | OpenCode 真实事件、原子文件、启动重放、坏文件隔离、旧运行拦截和实时刷新 |
+| Agent 事件   | 可用     | OpenCode/Chrys 真实事件、原子文件、重放、坏文件隔离与旧运行拦截         |
 | Git Diff     | 未完成   | 只有仓库校验；状态、Diff 和评论尚未实现                                 |
 | Windows 交付 | 基础可用 | NSIS 可构建；打包态 PTY 接回与回收已验收，签名、升级和卸载留到 M7       |
 
@@ -24,12 +25,12 @@ DevStation 已完成 M4.3：OpenCode 通过受管 Plugin 上报真实会话与�
 ```text
 创建任务
 → 添加并关联本地 Git 项目
-→ 创建工作会话
+→ 选择 OpenCode 或 Chrys 创建工作会话
 → 从任务详情或 AI 空间项目树打开会话
-→ 自动连接 PowerShell 并启动 OpenCode
-→ 自动绑定当前 OpenCode 顶层会话并显示真实工作、等待、完成或失败状态
+→ 自动连接 PowerShell 并启动所选 Agent 的原生 TUI
+→ 自动绑定原生会话并显示真实工作、等待、完成或失败状态
 → 页面切换或应用重启时自动回到原工作现场并热接回原 PTY
-→ PTY 已结束时用 OpenCode 原生 Session ID 恢复
+→ PTY 已结束时用所选 Agent 的原生 Session ID 恢复
 ```
 
 ## 运行结构
@@ -41,12 +42,12 @@ flowchart LR
     Main["Main：权限、上下文与 IPC"]
     DB["SQLite：任务、项目、会话绑定"]
     Runtime["Agent Runtime / Registry"]
-    Adapter["OpenCode Adapter"]
+    Adapter["OpenCode / Chrys Adapter"]
     Bridge["Managed Event Bridge"]
     Inbox["Agent Event Inbox"]
     Terminal["TerminalManager"]
     Host["独立 Terminal Host：稳定 PTY"]
-    OC["OpenCode：TUI 与原生会话"]
+    Agent["Coding Agent：原生 TUI 与会话"]
 
     UI --> Preload --> Main
     Main --> DB
@@ -54,8 +55,8 @@ flowchart LR
     Main --> Terminal
     Runtime -->|Prepared Agent 运行| Terminal
     Terminal -->|连接 / 脱离 / I/O| Host
-    Host -->|PowerShell 启动或恢复| OC
-    OC -.->|M4.3 Plugin 事件| Bridge
+    Host -->|PowerShell 启动或恢复| Agent
+    Agent -.->|Plugin / Hook 事件| Bridge
     Bridge -->|原子事件文件| Inbox --> DB
 ```
 
@@ -63,13 +64,13 @@ Renderer 不能提交 cwd、启动参数或环境变量；Adapter 生成结构�
 
 ## 主要风险
 
-| ID  | 风险与影响                                             | 处理方向                                     |
-| --- | ------------------------------------------------------ | -------------------------------------------- |
-| R1  | Terminal Host 崩溃仍会丢失活 PTY                       | UI 明确断连；已保存原生 ID 时可冷恢复        |
-| R2  | OpenCode 数据库结构升级可能影响 Session ID 识别        | 访问集中在只读定位器，增加版本兼容测试       |
-| R3  | OpenCode Plugin 异常目前只记录诊断，用户无法在 UI 修复 | M4.5 提供启停、修复和降级提示                |
-| R4  | 2 MB 原始终端快照不是完整持久化                        | 快照仅用于热接回；历史事实由 OpenCode 管理   |
-| R5  | 安装包尚未完成签名、升级和卸载矩阵                     | M7 在干净 Windows 环境验收                   |
-| R6  | 多 Agent 边界目前只由测试 Adapter 验证                 | M4.4 接入 Claude Code 作为第二个真实 Adapter |
+| ID  | 风险与影响                                             | 处理方向                                    |
+| --- | ------------------------------------------------------ | ------------------------------------------- |
+| R1  | Terminal Host 崩溃仍会丢失活 PTY                       | UI 明确断连；已保存原生 ID 时可冷恢复       |
+| R2  | OpenCode 数据库结构升级可能影响 Session ID 识别        | 访问集中在只读定位器，增加版本兼容测试      |
+| R3  | OpenCode Plugin 异常目前只记录诊断，用户无法在 UI 修复 | M4.5 提供启停、修复和降级提示               |
+| R4  | 2 MB 原始终端快照不是完整持久化                        | 快照仅用于热接回；历史事实由原生 Agent 管理 |
+| R5  | 安装包尚未完成签名、升级和卸载矩阵                     | M7 在干净 Windows 环境验收                  |
+| R6  | Hook/Plugin 异常目前无法在 UI 中诊断或修复             | M4.5 提供通用设置、启停、修复和降级提示     |
 
-下一步按[实施计划](./PLAN.md)进入 M4.4；代码入口见[代码地图](./CODE_MAP.md)。
+下一步按[实施计划](./PLAN.md)进入 M4.5；代码入口见[代码地图](./CODE_MAP.md)。

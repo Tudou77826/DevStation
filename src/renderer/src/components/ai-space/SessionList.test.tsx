@@ -5,6 +5,15 @@ import { SessionList } from './SessionList'
 
 const mocks = vi.hoisted(() => {
   const state = {
+    agents: [
+      {
+        descriptor: { id: 'opencode', label: 'OpenCode' }
+      },
+      {
+        descriptor: { id: 'chrys', label: 'Chrys' }
+      }
+    ],
+    loadAgents: vi.fn(async () => []),
     sessionsByTask: {} as Record<string, Array<Record<string, unknown>>>,
     sessionsByProject: {} as Record<string, Array<Record<string, unknown>>>,
     loadSessionsByTask: vi.fn(async () => []),
@@ -52,7 +61,22 @@ describe('SessionList', () => {
     render(<SessionList taskId="task-2" />)
     fireEvent.click(screen.getByRole('button', { name: '新建工作会话' }))
     await waitFor(() =>
-      expect(mocks.state.createSessionFromTask).toHaveBeenCalledWith('task-2')
+      expect(mocks.state.createSessionFromTask).toHaveBeenCalledWith('task-2', 'opencode')
+    )
+  })
+
+  it('creates a session with the selected Coding Agent', async () => {
+    render(<SessionList taskId="task-chrys" />)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Coding Agent' }), {
+      target: { value: 'chrys' }
+    })
+    fireEvent.click(screen.getByRole('button', { name: '新建工作会话' }))
+
+    await waitFor(() =>
+      expect(mocks.state.createSessionFromTask).toHaveBeenCalledWith(
+        'task-chrys',
+        'chrys'
+      )
     )
   })
 

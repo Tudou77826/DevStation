@@ -6,6 +6,7 @@
 import type { ZodTypeAny } from 'zod'
 import type { ProjectRepo, SessionRepo, TaskRepo } from '../db/repositories'
 import type { BrowserWindow } from 'electron'
+import type { AgentRegistry } from '../agents/registry'
 
 export interface RpcContext {
   repositories: {
@@ -13,6 +14,7 @@ export interface RpcContext {
     projects: ProjectRepo
     sessions: SessionRepo
   }
+  agentRegistry: AgentRegistry
   /** the requesting window; some methods (dialog) need it */
   sender: BrowserWindow | null
 }

@@ -33,12 +33,24 @@ export function SessionList({
   const loadByProject = useDataStore((s) => s.loadSessionsByProject)
   const loadByTask = useDataStore((s) => s.loadSessionsByTask)
   const createFromTask = useDataStore((s) => s.createSessionFromTask)
+  const agents = useDataStore((s) => s.agents)
+  const loadAgents = useDataStore((s) => s.loadAgents)
   const touchSession = useDataStore((s) => s.touchSession)
   const setSection = useNavStore((s) => s.setSection)
   const selectSession = useNavStore((s) => s.selectSession)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [agentId, setAgentId] = useState('opencode')
+
+  useEffect(() => {
+    if (agents.length === 0) void loadAgents()
+  }, [agents.length, loadAgents])
+
+  useEffect(() => {
+    if (agents.some((agent) => agent.descriptor.id === agentId)) return
+    if (agents[0] !== undefined) setAgentId(agents[0].descriptor.id)
+  }, [agentId, agents])
 
   useEffect(() => {
     let cancelled = false
@@ -64,7 +76,7 @@ export function SessionList({
 
   async function handleCreate(): Promise<void> {
     if (taskId === undefined) return
-    await createFromTask(taskId)
+    await createFromTask(taskId, agentId)
   }
 
   function handleOpen(session: Session): void {
@@ -84,14 +96,29 @@ export function SessionList({
           {loading ? '加载中…' : `${sessions.length} 个会话`}
         </span>
         {taskId !== undefined && (
-          <button
-            type="button"
-            onClick={() => void handleCreate()}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-          >
-            <Plus size={13} />
-            新建工作会话
-          </button>
+          <span className="flex items-center gap-1.5">
+            <select
+              aria-label="Coding Agent"
+              value={agentId}
+              onChange={(event) => setAgentId(event.target.value)}
+              className="rounded-md border border-border bg-background px-2 py-1 text-[11px] text-foreground outline-none focus:border-ring"
+            >
+              {agents.map((agent) => (
+                <option key={agent.descriptor.id} value={agent.descriptor.id}>
+                  {agent.descriptor.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void handleCreate()}
+              disabled={agents.length === 0}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus size={13} />
+              新建工作会话
+            </button>
+          </span>
         )}
       </div>
       {error !== null ? (
@@ -129,6 +156,9 @@ export function SessionList({
                   {s.lastOpenedAt !== null
                     ? relTime(s.lastOpenedAt)
                     : relTime(s.createdAt)}
+                  <span>·</span>
+                  {agents.find((agent) => agent.descriptor.id === s.agentId)?.descriptor
+                    .label ?? s.agentId}
                 </span>
               </span>
               <StatusBadge status={s.status} />

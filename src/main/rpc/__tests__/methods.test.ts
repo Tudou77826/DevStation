@@ -47,7 +47,14 @@ function context(
   repos = repositories(),
   sender: RpcContext['sender'] = null
 ): RpcContext {
-  return { repositories: repos as unknown as RpcContext['repositories'], sender }
+  return {
+    repositories: repos as unknown as RpcContext['repositories'],
+    agentRegistry: {
+      catalog: vi.fn().mockResolvedValue([]),
+      get: vi.fn().mockReturnValue({})
+    } as unknown as RpcContext['agentRegistry'],
+    sender
+  }
 }
 
 async function call(name: string, params: unknown, ctx: RpcContext): Promise<unknown> {
@@ -72,6 +79,7 @@ describe('RPC method registry', () => {
   it('registers the complete public RPC whitelist', () => {
     const registry = buildRegistry()
     const names = [
+      'agents.list',
       'tasks.list',
       'tasks.create',
       'tasks.update',
@@ -101,6 +109,20 @@ describe('RPC method registry', () => {
     await expect(
       call('projects.create', { name: 'p', path: 'x'.repeat(1025) }, ctx)
     ).rejects.toThrow()
+    await expect(
+      call('sessions.createFromTask', { taskId: 't1', agentId: 'Bad Agent' }, ctx)
+    ).rejects.toThrow()
+  })
+
+  it('returns the provider-neutral Agent catalog', async () => {
+    const ctx = context()
+    const catalog = [{ descriptor: { id: 'chrys' } }]
+    vi.mocked(ctx.agentRegistry.catalog).mockReturnValue(
+      catalog as ReturnType<RpcContext['agentRegistry']['catalog']>
+    )
+
+    await expect(call('agents.list', {}, ctx)).resolves.toEqual(catalog)
+    expect(ctx.agentRegistry.catalog).toHaveBeenCalledOnce()
   })
 
   it('delegates every task operation with normalized parameters', async () => {
@@ -219,6 +241,9 @@ describe('RPC method registry', () => {
     await expect(call('sessions.createFromTask', { taskId: 't1' }, ctx)).resolves.toBe(
       'session'
     )
+    await expect(
+      call('sessions.createFromTask', { taskId: 't1', agentId: 'chrys' }, ctx)
+    ).resolves.toBe('session')
     await expect(call('sessions.listByTask', { taskId: 't1' }, ctx)).resolves.toEqual([
       'task-session'
     ])
@@ -227,6 +252,8 @@ describe('RPC method registry', () => {
     ).resolves.toEqual(['project-session'])
     await expect(call('sessions.touch', { id: 's1' }, ctx)).resolves.toBe('touched')
     expect(repos.projects.delete).toHaveBeenCalledWith('p1')
+    expect(repos.sessions.createFromTask).toHaveBeenNthCalledWith(1, 't1', 'opencode')
+    expect(repos.sessions.createFromTask).toHaveBeenNthCalledWith(2, 't1', 'chrys')
   })
 
   it('rejects session creation when its task no longer exists', async () => {
@@ -234,6 +261,18 @@ describe('RPC method registry', () => {
     repos.tasks.get.mockReturnValue(null)
     await expect(
       call('sessions.createFromTask', { taskId: 'missing' }, context(repos))
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    expect(repos.sessions.createFromTask).not.toHaveBeenCalled()
+  })
+
+  it('rejects session creation for an unregistered Agent', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    repos.tasks.get.mockReturnValue({ id: 't1' })
+    vi.mocked(ctx.agentRegistry.get).mockReturnValue(null)
+
+    await expect(
+      call('sessions.createFromTask', { taskId: 't1', agentId: 'missing' }, ctx)
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
     expect(repos.sessions.createFromTask).not.toHaveBeenCalled()
   })

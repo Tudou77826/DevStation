@@ -11,7 +11,7 @@
 | `npm run verify:nightly` | PR 门禁 + 依赖、许可证、安全审计、Windows 构建 | 定时或手动全量验证   |
 | `npm run verify:release` | nightly + 打包态终端生命周期                   | 发布候选             |
 
-`test:terminal` 只验证真实 PTY，不绑定任何 Agent CLI，保证结果确定。Agent 适配通过固定命令契约、供应商数据适配测试和显式启用的本机 smoke 验证。
+`test:terminal` 只验证真实 PTY，不绑定任何 Agent CLI，保证结果确定。Agent 适配通过固定命令契约、供应商数据适配测试和显式启用的本机 smoke 验证。Chrys smoke 使用 `DEVSTATION_CHRYS_SMOKE=1` 和 `DEVSTATION_CHRYS_BIN_DIR=<目录>` 启用，覆盖真实 TUI 启动、Hook 状态、原生 Session ID 绑定和 `-s` 冷恢复。
 
 `test:event-bridge` 单独启动 PowerShell 验证 Electron 关闭时的原子事件写入。它在 PR 门禁中串行执行，不进入普通单测和覆盖率并发池，避免外部进程冷启动挤占 SQLite 测试预算。
 
@@ -40,6 +40,8 @@
 - Agent 事件先原子落盘再归约；重复、乱序和旧 `agentRunId` 事件不得回退当前状态。
 - Electron 关闭期间的事件可在下次启动重放；坏文件被隔离且不能阻塞终端或其他有效事件。
 - 受管 Plugin 在普通 OpenCode 进程中必须静默，只能绑定当前目录、本次运行的目标顶层会话。
+- Chrys 受管 Hook 只能增量维护 DevStation 标识项；用户 Hook、注释和同名冲突必须保留。
+- Chrys 的会话、工作和结束状态必须来自生命周期 Hook；等待与恢复必须来自匹配 `ask_user` 的工具 Hook，并经同一事件 Bridge 落盘。
 - 安装和卸载只能处理带 DevStation 标识的文件；同路径的用户文件必须保留并报告冲突。
 - Electron 重启后可接回同一个 PowerShell PID，并重建可见终端内容。
 - 宿主连接先完成协议版本握手；断连后旧的 Renderer 所有权立即失效。
@@ -63,4 +65,4 @@
 4. 能力稳定后再提高对应模块阈值。
 5. 删除与现状冲突、只验证实现细节或长期无价值的测试。
 
-当前缺口：Main/Preload 安全配置定向测试、Claude Code 的 Managed Integration 契约、NSIS 安装升级卸载矩阵，以及更早历史数据库升级矩阵。
+当前缺口：Main/Preload 安全配置定向测试、M4.5 设置中心 E2E、NSIS 安装升级卸载矩阵，以及更早历史数据库升级矩阵。

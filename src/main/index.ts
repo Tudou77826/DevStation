@@ -7,6 +7,8 @@ import { TerminalHostClient } from './terminal/terminal-host-client'
 import { OpenCodeSessionLocator } from './agents/opencode-session-locator'
 import { OpenCodeAdapter } from './agents/opencode-adapter'
 import { OpenCodeManagedIntegration } from './agents/opencode-managed-integration'
+import { ChrysAdapter } from './agents/chrys-adapter'
+import { ChrysManagedIntegration } from './agents/chrys-managed-integration'
 import { AgentRegistry } from './agents/registry'
 import { AgentRuntimeService } from './agents/runtime-service'
 import { ManagedEventBridge } from './agents/managed-event-bridge'
@@ -190,12 +192,44 @@ void app.whenReady().then(() => {
     return
   }
 
-  // 2. RPC dispatcher on a single channel, sender-bound context.
-  const registry = buildRegistry()
+  // 2. Build the provider-neutral Agent catalog before exposing RPC so session
+  // creation can validate the selected adapter at the Main boundary.
+  const isolateExternalIntegrations =
+    process.env['DEVSTATION_E2E'] === '1' ||
+    process.env['DEVSTATION_PACKAGED_SMOKE'] === '1'
+  const openCodeIntegration = new OpenCodeManagedIntegration(
+    isolateExternalIntegrations
+      ? { configRoot: join(app.getPath('userData'), 'integrations', 'opencode') }
+      : {}
+  )
+  const chrysIntegration = new ChrysManagedIntegration(
+    isolateExternalIntegrations
+      ? { configRoot: join(app.getPath('userData'), 'integrations', 'chrys') }
+      : {}
+  )
+  for (const [label, diagnostic] of [
+    ['OpenCode', openCodeIntegration.ensureInstalled()],
+    ['Chrys', chrysIntegration.ensureInstalled()]
+  ] as const) {
+    if (diagnostic.state !== 'current') {
+      console.warn(`[DevStation] ${label} event integration unavailable:`, diagnostic)
+    }
+  }
+  const agentRegistry = new AgentRegistry([
+    new OpenCodeAdapter(new OpenCodeSessionLocator(), openCodeIntegration),
+    new ChrysAdapter(chrysIntegration)
+  ])
+
+  // 3. RPC dispatcher on a single channel, sender-bound context.
+  const rpcRegistry = buildRegistry()
   const dispatcher = createDispatcher(
-    registry,
+    rpcRegistry,
     (sender): RpcContext => {
-      return { repositories, sender: BrowserWindow.fromWebContents(sender) }
+      return {
+        repositories,
+        agentRegistry,
+        sender: BrowserWindow.fromWebContents(sender)
+      }
     },
     (sender) =>
       mainWindow !== null &&
@@ -204,7 +238,7 @@ void app.whenReady().then(() => {
   )
   ipcMain.handle('rpc', dispatcher)
 
-  // 3. native theme, terminal boundary and window.
+  // 4. native theme, terminal boundary and window.
   ipcMain.handle('theme:update', (_event, theme: 'dark' | 'light') => {
     if (theme !== 'dark' && theme !== 'light') throw new Error('Unsupported theme')
     const senderWindow = BrowserWindow.fromWebContents(_event.sender)
@@ -215,24 +249,6 @@ void app.whenReady().then(() => {
     userDataPath: app.getPath('userData'),
     hostEntryPath: join(__dirname, 'terminal-host.js')
   })
-  const isolateExternalIntegrations =
-    process.env['DEVSTATION_E2E'] === '1' ||
-    process.env['DEVSTATION_PACKAGED_SMOKE'] === '1'
-  const openCodeIntegration = new OpenCodeManagedIntegration(
-    isolateExternalIntegrations
-      ? { configRoot: join(app.getPath('userData'), 'integrations', 'opencode') }
-      : {}
-  )
-  const integrationDiagnostic = openCodeIntegration.ensureInstalled()
-  if (integrationDiagnostic.state !== 'current') {
-    console.warn(
-      '[DevStation] OpenCode event integration unavailable:',
-      integrationDiagnostic
-    )
-  }
-  const agentRegistry = new AgentRegistry([
-    new OpenCodeAdapter(new OpenCodeSessionLocator(), openCodeIntegration)
-  ])
   let eventBridge: ManagedEventBridge | undefined
   try {
     eventBridge = new ManagedEventBridge(join(app.getPath('userData'), 'agent-events'))

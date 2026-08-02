@@ -64,12 +64,20 @@ const projectsCreateParams = z
   .strict()
 const emptyParams = z.object({}).strict()
 const taskIdParams = z.object({ taskId: idSchema }).strict()
+const agentIdSchema = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/)
+const createSessionFromTaskParams = z
+  .object({ taskId: idSchema, agentId: agentIdSchema.optional() })
+  .strict()
 const projectIdParams = z.object({ projectId: idSchema }).strict()
 
 // ── Build registry ───────────────────────────────────────────────────────────
 
 export function buildRegistry(): RpcRegistry {
   const reg = new RpcRegistry()
+
+  reg.register(
+    method('agents.list', emptyParams, (_p, { agentRegistry }) => agentRegistry.catalog())
+  )
 
   // tasks
   reg.register(
@@ -157,11 +165,17 @@ export function buildRegistry(): RpcRegistry {
 
   // sessions
   reg.register(
-    method('sessions.createFromTask', taskIdParams, (p, { repositories }) => {
-      const task = repositories.tasks.get(p.taskId)
-      if (task === null) throw notFound('任务')
-      return repositories.sessions.createFromTask(p.taskId)
-    })
+    method(
+      'sessions.createFromTask',
+      createSessionFromTaskParams,
+      (p, { repositories, agentRegistry }) => {
+        const task = repositories.tasks.get(p.taskId)
+        if (task === null) throw notFound('任务')
+        const agentId = p.agentId ?? 'opencode'
+        if (agentRegistry.get(agentId) === null) throw notFound('Coding Agent')
+        return repositories.sessions.createFromTask(p.taskId, agentId)
+      }
+    )
   )
   reg.register(
     method('sessions.listByTask', taskIdParams, (p, { repositories }) =>
