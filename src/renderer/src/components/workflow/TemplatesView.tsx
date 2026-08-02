@@ -48,8 +48,7 @@ export function TemplatesView(): React.ReactElement {
     <div>
       <h1 className="text-[20px] font-semibold text-foreground">工作流模板</h1>
       <p className="mt-2 text-[13px] text-muted-foreground">
-        不同研发场景对应不同的 AAW 阶段组合。阶段 1
-        仅展示模板;后续阶段可基于模板创建工作流。
+        不同研发场景对应不同的 AAW 阶段组合。MVP 仅展示模板，真实工作流集成不在当前范围。
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-3">

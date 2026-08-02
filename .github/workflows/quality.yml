@@ -7,13 +7,24 @@ on:
   schedule:
     - cron: '30 18 * * *'
   workflow_dispatch:
+    inputs:
+      gate:
+        description: Gate to run
+        required: true
+        default: pr
+        type: choice
+        options:
+          - pr
+          - nightly
 
 permissions:
   contents: read
 
 jobs:
   pr-gate:
-    if: github.event_name != 'schedule'
+    if: >-
+      github.event_name != 'schedule' &&
+      (github.event_name != 'workflow_dispatch' || inputs.gate == 'pr')
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -36,7 +47,9 @@ jobs:
             test-results/
 
   nightly-gate:
-    if: github.event_name == 'schedule'
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.gate == 'nightly')
     runs-on: windows-latest
     timeout-minutes: 45
     steps:

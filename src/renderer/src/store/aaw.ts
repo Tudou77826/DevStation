@@ -1,13 +1,10 @@
 // Awesome-Agent-Workflow (AAW) pipeline model.
 //
-// This is a faithful TypeScript mirror of AAW's real flow.yaml DAG (13 nodes,
-// 5 phases) + the per-step execution_status values from workflow.yaml. Stage 1
-// ships MOCK status so the workflow page is alive; Stage 2/4 will read the
-// real .sdd/{SR}/workflow.yaml into this same shape.
+// This mirrors AAW's flow.yaml DAG and per-step execution status. The MVP keeps
+// this page as an explicit mock placeholder; real workflow integration is out
+// of scope until a later product phase.
 //
-// Source of truth: D:\dev\workspace-ai\Awesome-Agent-Workflow
-//   - skills/aaw-workflow/scripts/cli/definitions/flow.yaml  (DAG)
-//   - skills/aaw-workflow/scripts/cli/models.py              (Step schema)
+// Reference source: Awesome-Agent-Workflow's flow.yaml and Step schema.
 
 /** AAW phase = one swimlane in the pipeline view. */
 export type AawPhase =

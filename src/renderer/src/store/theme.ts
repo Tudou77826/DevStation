@@ -1,8 +1,7 @@
 // Theme store: resolves light/dark/system to the actual mode applied to <html>.
 //
-// Stage 1 persists the choice in localStorage so it survives reloads; Stage 2
-// can move this into SQLite-backed settings. The .dark class on <html> drives
-// all CSS variables defined in main.css (:root = light, .dark = dark).
+// The choice persists in localStorage so it survives reloads. The .dark class
+// on <html> drives all CSS variables in main.css (:root = light, .dark = dark).
 import { create } from 'zustand'
 
 export type ThemeChoice = 'light' | 'dark' | 'system'

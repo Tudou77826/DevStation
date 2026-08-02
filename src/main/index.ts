@@ -197,7 +197,7 @@ void app.whenReady().then(() => {
   )
   ipcMain.handle('rpc', dispatcher)
 
-  // 3. theme + terminal (Stage 0/1 wiring) + window.
+  // 3. native theme, terminal boundary and window.
   ipcMain.handle('theme:update', (_event, theme: 'dark' | 'light') => {
     if (theme !== 'dark' && theme !== 'light') throw new Error('Unsupported theme')
     const senderWindow = BrowserWindow.fromWebContents(_event.sender)

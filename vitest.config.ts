@@ -14,10 +14,10 @@ export default defineConfig({
         'src/renderer/src/env.d.ts'
       ],
       thresholds: {
-        lines: 50,
-        statements: 47,
-        functions: 39,
-        branches: 34,
+        lines: 60,
+        statements: 55,
+        functions: 50,
+        branches: 45,
         'src/main/db/**': {
           lines: 90,
           statements: 85,
@@ -53,6 +53,30 @@ export default defineConfig({
           statements: 100,
           functions: 100,
           branches: 95
+        },
+        'src/main/terminal/terminal-host.ts': {
+          lines: 95,
+          statements: 95,
+          functions: 95,
+          branches: 90
+        },
+        'src/main/terminal/terminal-host-client.ts': {
+          lines: 80,
+          statements: 74,
+          functions: 74,
+          branches: 55
+        },
+        'src/main/terminal/opencode-session-locator.ts': {
+          lines: 85,
+          statements: 82,
+          functions: 85,
+          branches: 50
+        },
+        'src/renderer/src/store/nav.ts': {
+          lines: 85,
+          statements: 85,
+          functions: 80,
+          branches: 75
         }
       }
     }

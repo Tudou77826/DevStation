@@ -8,10 +8,12 @@
 | ------------------------ | ---------------------------------------------- | -------------------- |
 | `npm run verify:fast`    | 类型、Lint、格式、依赖方向、单元与组件测试     | 本地频繁执行         |
 | `npm run verify:pr`      | fast + 覆盖率 + Electron E2E + 真实 PTY smoke  | 跨进程或用户链路变更 |
-| `npm run verify:nightly` | PR 门禁 + 依赖、许可证、安全审计、Windows 构建 | 定时与发布前         |
+| `npm run verify:nightly` | PR 门禁 + 依赖、许可证、安全审计、Windows 构建 | 定时或手动全量验证   |
 | `npm run verify:release` | nightly + 打包态终端生命周期                   | 发布候选             |
 
 `test:terminal` 只验证真实 PTY，不绑定任何 Agent CLI，保证结果确定。Agent 适配通过固定命令契约、供应商数据适配测试和显式启用的本机 smoke 验证。
+
+`main` 只允许通过 Pull Request 合入，并要求 `pr-gate` 成功；Nightly 用于发现供应链和打包回归，不能替代合并门禁。`build:win` 只验证安装包构建，禁止隐式发布；版本发布使用独立的人工授权流程。
 
 ## 分层职责
 
@@ -40,7 +42,7 @@
 
 ## 覆盖率策略
 
-全局阈值用于发现防护网倒退；关键模块使用独立高阈值。当前 `TerminalManager` 要求 100% 行/函数、100% 语句和至少 95% 分支覆盖。
+全局最低阈值为：行 60%、语句 55%、函数 50%、分支 45%。数据库、Git、RPC、Renderer Data Store、导航状态和终端核心模块使用独立阈值；具体数值以 `vitest.config.ts` 为准。
 
 覆盖率不能替代场景价值。新增测试前先说明它防止的故障；无法关联到用户风险、数据风险或架构边界的断言不应加入。
 

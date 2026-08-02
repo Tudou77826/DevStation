@@ -331,7 +331,7 @@ export class SessionRepo {
 
   /**
    * Create a session bound to a task; snapshot the task's current project.
-   * Does NOT start an Agent or register a Hook (Stage 2 boundary).
+   * Agent startup remains owned by terminal connection; this only persists metadata.
    */
   createFromTask(taskId: string): Session {
     const task = asRow<TaskRow>(

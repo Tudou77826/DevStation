@@ -118,7 +118,7 @@ export function TerminalPane(): React.ReactElement {
     <SettingsSection
       id="terminal"
       title="终端"
-      badge="M3.2 可用"
+      badge="已可用"
       description="AI 主工作区使用本地 PowerShell，并通过独立 PTY 宿主保持运行和接回。"
     >
       <SettingsRow
@@ -165,7 +165,7 @@ export function AboutPane(): React.ReactElement {
         </div>
         <div>
           <div className="text-[15px] font-semibold text-foreground">DevStation</div>
-          <div className="text-[12px] text-muted-foreground">版本 0.1.0 · MVP M3.2</div>
+          <div className="text-[12px] text-muted-foreground">版本 0.1.0</div>
         </div>
       </div>
       <p className="max-w-xl py-2 text-[13px] leading-relaxed text-muted-foreground">

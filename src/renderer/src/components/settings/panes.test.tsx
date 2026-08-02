@@ -16,16 +16,16 @@ describe('settings capability facts', () => {
     expect(screen.queryAllByRole('switch')).toHaveLength(0)
   })
 
-  it('keeps terminal and About facts aligned with M3.2', () => {
+  it('shows stable terminal and About facts without a hard-coded project phase', () => {
     const { unmount } = render(<TerminalPane />)
-    expect(screen.getByText('M3.2 可用')).toBeTruthy()
+    expect(screen.getByText('已可用')).toBeTruthy()
     expect(screen.getByText('13 px')).toBeTruthy()
     expect(screen.queryByText('阶段 3')).toBeNull()
     unmount()
 
     render(<AboutPane />)
-    expect(screen.getByText('版本 0.1.0 · MVP M3.2')).toBeTruthy()
+    expect(screen.getByText('版本 0.1.0')).toBeTruthy()
     expect(screen.getByText(/Hook 状态与 Diff 评审仍在建设中/)).toBeTruthy()
-    expect(screen.queryByText(/MVP 阶段 1/)).toBeNull()
+    expect(screen.queryByText(/MVP M3\.2|MVP 阶段/)).toBeNull()
   })
 })
