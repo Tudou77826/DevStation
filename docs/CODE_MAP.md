@@ -15,6 +15,7 @@
 | 导航、现场恢复与右栏 | [`store/nav.ts`](../src/renderer/src/store/nav.ts)                                   | `nav.test.ts`、Electron E2E        |
 | 工作会话入口         | [`SessionList.tsx`](../src/renderer/src/components/ai-space/SessionList.tsx)         | `SessionList.test.tsx`、E2E        |
 | AI 主工作区          | [`AISpaceWorkArea.tsx`](../src/renderer/src/components/workarea/AISpaceWorkArea.tsx) | Electron E2E                       |
+| 工作流展示占位       | [`WorkflowPanel.tsx`](../src/renderer/src/components/workflow/WorkflowPanel.tsx)     | `store/aaw.ts`，当前仅为模拟数据   |
 | xterm 生命周期       | [`TerminalPane.tsx`](../src/renderer/src/components/terminal/TerminalPane.tsx)       | `TerminalPane.test.tsx`            |
 | 终端上下文与权限     | [`terminal-manager.ts`](../src/main/terminal/terminal-manager.ts)                    | `terminal-manager.test.ts`         |
 | 独立 PTY 宿主        | [`terminal-host.ts`](../src/main/terminal/terminal-host.ts)                          | host、client、protocol 测试        |
