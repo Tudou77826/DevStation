@@ -8,6 +8,8 @@ import { OpenCodeSessionLocator } from './agents/opencode-session-locator'
 import { OpenCodeAdapter } from './agents/opencode-adapter'
 import { AgentRegistry } from './agents/registry'
 import { AgentRuntimeService } from './agents/runtime-service'
+import { ManagedEventBridge } from './agents/managed-event-bridge'
+import { AgentEventInbox } from './agents/agent-event-inbox'
 import { Database } from './db/database'
 import { initializeDatabase } from './db/schema'
 import { ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
@@ -44,6 +46,7 @@ if (
 
 let mainWindow: BrowserWindow | null = null
 let terminalManager: TerminalManager | null = null
+let agentEventInbox: AgentEventInbox | null = null
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 if (!hasSingleInstanceLock) app.quit()
@@ -214,9 +217,28 @@ void app.whenReady().then(() => {
   const agentRegistry = new AgentRegistry([
     new OpenCodeAdapter(new OpenCodeSessionLocator())
   ])
+  let eventBridge: ManagedEventBridge | undefined
+  try {
+    eventBridge = new ManagedEventBridge(join(app.getPath('userData'), 'agent-events'))
+    eventBridge.ensureInstalled()
+    agentEventInbox = new AgentEventInbox({
+      inboxRoot: eventBridge.inboxRoot,
+      registry: agentRegistry,
+      sessions: repositories.sessions
+    })
+    agentEventInbox.start()
+  } catch (error) {
+    // Event integration is optional infrastructure. A read-only or damaged
+    // inbox must not prevent the terminal-first Agent workflow from starting.
+    console.error('[DevStation] Agent event integration unavailable:', error)
+    agentEventInbox?.stop()
+    agentEventInbox = null
+    eventBridge = undefined
+  }
   const agentRuntime = new AgentRuntimeService({
     registry: agentRegistry,
-    sessions: repositories.sessions
+    sessions: repositories.sessions,
+    eventBridge
   })
   terminalManager = new TerminalManager({
     host: terminalHost,
@@ -261,6 +283,8 @@ app.on('before-quit', (event) => {
   }
   terminalManager?.dispose()
   terminalManager = null
+  agentEventInbox?.stop()
+  agentEventInbox = null
   db?.close()
   db = null
 })

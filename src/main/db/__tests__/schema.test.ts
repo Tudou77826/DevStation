@@ -13,6 +13,7 @@ describe('schema + migrations', () => {
       expect(names).toContain('projects')
       expect(names).toContain('tasks')
       expect(names).toContain('sessions')
+      expect(names).toContain('agent_event_receipts')
     })
   })
 
@@ -36,7 +37,8 @@ describe('schema + migrations', () => {
         'agent_session_ref',
         'agent_run_id',
         'agent_status_source',
-        'agent_status_updated_at'
+        'agent_status_updated_at',
+        'agent_status_event_id'
       ])
     )
     expect(() =>

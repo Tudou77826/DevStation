@@ -5,6 +5,7 @@ import type { SessionRepo } from '../db/repositories'
 import type { AgentSessionLocator, CodingAgentAdapter } from './adapter'
 import { encodePowerShellInvocation } from './agent-launch'
 import type { AgentRegistry } from './registry'
+import type { ManagedEventBridge } from './managed-event-bridge'
 
 const DISCOVERY_DEBOUNCE_MS = 250
 const DISCOVERY_TIMEOUT_MS = 30_000
@@ -51,6 +52,7 @@ export interface AgentRuntimeServiceOptions {
   sessions: Pick<SessionRepo, 'get' | 'setAgentSessionRef' | 'startAgentRun'>
   createRunId?: () => string
   now?: () => number
+  eventBridge?: Pick<ManagedEventBridge, 'enrichLaunchSpec'>
 }
 
 export class AgentRuntimeService {
@@ -76,7 +78,13 @@ export class AgentRuntimeService {
       agentRunId: this.createRunId()
     }
     const resume = ref === null ? null : adapter.buildResume(context, ref)
-    const launchSpec = resume ?? adapter.buildLaunch(context)
+    const adapterLaunchSpec = resume ?? adapter.buildLaunch(context)
+    const launchSpec =
+      this.options.eventBridge?.enrichLaunchSpec(adapterLaunchSpec, {
+        agentId: adapter.descriptor.id,
+        devStationSessionId: session.id,
+        agentRunId: context.agentRunId
+      }) ?? adapterLaunchSpec
     const discoverySnapshot =
       ref === null && adapter.sessionLocator !== undefined
         ? this.safeSnapshot(adapter.sessionLocator, cwd)

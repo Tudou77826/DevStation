@@ -35,6 +35,8 @@
 - 新 Agent Session 只绑定当前目录、本次启动后出现的供应商顶层会话。
 - 已保存且通过 Adapter 校验的原生引用才能进入冷恢复 argv；无效引用不得降级为新会话。
 - Adapter 只能返回结构化 executable、args 和 env；所有值由 Main 统一编码，不能拼接 Shell。
+- Agent 事件先原子落盘再归约；重复、乱序和旧 `agentRunId` 事件不得回退当前状态。
+- Electron 关闭期间的事件可在下次启动重放；坏文件被隔离且不能阻塞终端或其他有效事件。
 - Electron 重启后可接回同一个 PowerShell PID，并重建可见终端内容。
 - 宿主连接先完成协议版本握手；断连后旧的 Renderer 所有权立即失效。
 - 主动结束能把真实退出结果反馈到 UI；没有 PTY 和客户端时宿主自动退出。
@@ -57,4 +59,4 @@
 4. 能力稳定后再提高对应模块阈值。
 5. 删除与现状冲突、只验证实现细节或长期无价值的测试。
 
-当前缺口：Main/Preload 安全配置定向测试、Agent 事件与 Managed Integration 契约、NSIS 安装升级卸载矩阵，以及更早历史数据库升级矩阵。
+当前缺口：Main/Preload 安全配置定向测试、OpenCode/Claude Code 的 Managed Integration 契约、NSIS 安装升级卸载矩阵，以及更早历史数据库升级矩阵。
