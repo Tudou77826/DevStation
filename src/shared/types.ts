@@ -65,8 +65,8 @@ export interface TerminalSession {
   isNew: boolean
   agentId: string | null
   agentLabel: string | null
-  /** True when a new PowerShell used the Agent's native resume command. */
-  agentResumed: boolean
+  /** True when a new PowerShell was started with the Agent's native resume command. */
+  agentResumeRequested: boolean
   /** Current daemon-side terminal contents used to rebuild xterm after attach. */
   snapshot: string
   host: TerminalHostInfo

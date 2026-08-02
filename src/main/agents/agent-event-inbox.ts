@@ -107,7 +107,7 @@ export class AgentEventInbox {
         return
       }
       event = parseAgentEventJson(readFileSync(path, 'utf8'), this.now())
-      this.validateSessionRef(event)
+      this.validateAdapterEvent(event)
     } catch (error) {
       if (isTransientFilesystemError(error)) {
         this.logger.warn('[DevStation] Agent event retained for retry:', error)
@@ -154,10 +154,16 @@ export class AgentEventInbox {
     result.consumed += 1
   }
 
-  private validateSessionRef(event: AgentEvent): void {
-    if (event.kind !== 'session-bound') return
+  private validateAdapterEvent(event: AgentEvent): void {
     const adapter = this.options.registry.get(event.agentId)
     if (adapter === null) throw new Error('Agent event references an unavailable adapter')
+    if (!adapter.descriptor.capabilities.activityEvents) {
+      throw new Error('Agent event was emitted by an adapter without event capability')
+    }
+    if (event.kind !== 'session-bound') return
+    if (!adapter.descriptor.capabilities.sessionIdentity) {
+      throw new Error('Agent event contains an unsupported native session reference')
+    }
     const ref = adapter.validateSessionRef(event.sessionRef)
     if (ref === null) throw new Error('Agent event contains an invalid session reference')
     event.sessionRef = ref

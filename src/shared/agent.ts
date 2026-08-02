@@ -3,11 +3,21 @@
 export type AgentCapability =
   'resume' | 'sessionIdentity' | 'activityEvents' | 'transcript'
 
+export type AgentSettingValue = string | boolean
+
+export interface AgentSettingOption {
+  value: string
+  label: string
+}
+
 export interface AgentSettingField {
   key: string
   label: string
+  description?: string
   kind: 'boolean' | 'path' | 'select'
   required: boolean
+  defaultValue?: AgentSettingValue
+  options?: readonly AgentSettingOption[]
 }
 
 export interface AgentSettingAction {
@@ -60,6 +70,8 @@ export interface AgentUserSettings {
   integrationEnabled: boolean
   executablePath: string | null
   isDefault: boolean
+  schemaVersion: number
+  values: Readonly<Record<string, AgentSettingValue>>
   updatedAt: number | null
 }
 

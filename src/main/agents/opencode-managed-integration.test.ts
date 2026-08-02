@@ -170,10 +170,13 @@ describe('OpenCodeManagedIntegration', () => {
       const inbox = new AgentEventInbox({
         inboxRoot: bridge.inboxRoot,
         registry: new AgentRegistry([
-          new OpenCodeAdapter({
-            snapshot: () => new Set(),
-            findCreatedSession: () => null
-          })
+          new OpenCodeAdapter(
+            {
+              snapshot: () => new Set(),
+              findCreatedSession: () => null
+            },
+            new OpenCodeManagedIntegration({ configRoot: join(root, 'opencode-config') })
+          )
         ]),
         sessions
       })

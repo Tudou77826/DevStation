@@ -52,13 +52,22 @@ test('Coding Agent 设置可诊断并显式启停事件集成', async () => {
     await page.getByRole('button', { name: /李工/ }).click()
     await page.getByRole('menuitem', { name: 'Agent 设置' }).click()
     await expect(page.getByRole('heading', { name: 'Coding Agent' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Test Agent' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'Test Agent', exact: true })
+    ).toBeVisible()
     const testAgentCard = page.locator('article').filter({
-      has: page.getByRole('heading', { name: 'Test Agent' })
+      has: page.getByRole('heading', { name: 'Test Agent', exact: true })
     })
     await expect(
       testAgentCard.getByText('检测通过，后续新建和恢复会话将使用此程序。')
     ).toBeVisible()
+
+    const alternateCard = page.locator('article').filter({
+      has: page.getByRole('heading', { name: 'Test Agent Alternate' })
+    })
+    await alternateCard.getByLabel('启动模式').selectOption('verbose')
+    await expect(alternateCard.getByLabel('启动模式')).toHaveValue('verbose')
+    await expect(alternateCard.getByText('检测测试 Agent')).toBeVisible()
 
     const openCodeCard = page.locator('article').filter({
       has: page.getByRole('heading', { name: 'OpenCode' })
@@ -229,14 +238,23 @@ test('任务详情中的工作会话可直达对应 AI 工作区', async () => {
     await title.fill('会话直达验收')
     await title.press('Enter')
     await page.getByLabel('关联项目').selectOption({ label: 'DevStation' })
+    await page.getByLabel('Coding Agent').selectOption('test-agent-alt')
     await page.getByRole('button', { name: '新建工作会话' }).click()
 
     await page.getByRole('button', { name: /会话直达验收 会话/ }).click()
 
     const aiWorkspace = page.getByRole('region', { name: 'AI 空间工作区' })
     await expect(aiWorkspace).toBeVisible()
-    await expect(page.getByText(/Test Agent .* PowerShell .* PID \d+/)).toBeVisible()
-    await expect(page.locator('.xterm-rows')).toContainText('DEVSTATION_TEST_AGENT_READY')
+    await expect(
+      page.getByText(/Test Agent Alternate .* PowerShell .* PID \d+/)
+    ).toBeVisible()
+    await expect(page.locator('.xterm-rows')).toContainText(
+      'DEVSTATION_TEST_AGENT_ALT_COMPACT_READY'
+    )
+    await expect(page.locator('.xterm-rows')).not.toContainText('$env:DEVSTATION_')
+    await expect(page.locator('.xterm-rows')).not.toContainText(
+      'DEVSTATION_AGENT_EVENT_TOKEN'
+    )
     await expect(
       aiWorkspace.getByText('会话直达验收 会话', { exact: true })
     ).toBeVisible()
@@ -423,7 +441,7 @@ test('本机 Chrys smoke：会话终端启动真实 Chrys TUI 并接收生命周
       timeout: 15_000
     })
     await page.getByRole('button', { name: '重新连接' }).click()
-    await expect(page.getByText('已恢复会话')).toBeVisible({ timeout: 15_000 })
+    await expect(page.getByText('已发起恢复')).toBeVisible({ timeout: 15_000 })
     const resumedHeader = await page
       .getByText(/Chrys · PowerShell · PID \d+/)
       .textContent()

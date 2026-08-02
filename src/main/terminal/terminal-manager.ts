@@ -134,6 +134,14 @@ export class TerminalManager {
     const cols = validateDimension(parsed.cols, 'cols')
     const rows = validateDimension(parsed.rows, 'rows')
     const shell = resolvePowerShellLaunch(process.platform, process.env)
+    const hostedShell =
+      resolved.agent === null
+        ? shell
+        : {
+            file: shell.file,
+            args: [...shell.args, '-NoExit', '-Command', resolved.agent.startupCommand],
+            env: { ...resolved.agent.launchSpec.env }
+          }
     let owners = this.owners.get(resolved.terminalId)
     if (owners === undefined) {
       owners = new Map()
@@ -152,10 +160,7 @@ export class TerminalManager {
         cols,
         rows,
         cwd: resolved.cwd,
-        shell,
-        ...(resolved.agent === null
-          ? {}
-          : { startupCommand: resolved.agent.startupCommand })
+        shell: hostedShell
       })
       diagnostics = await this.options.host.diagnostics()
     } catch (error) {
@@ -195,7 +200,7 @@ export class TerminalManager {
       isNew: result.isNew,
       agentId: resolved.agent?.agentId ?? null,
       agentLabel: resolved.agent?.agentLabel ?? null,
-      agentResumed: result.isNew && resolved.agent?.resumeRequested === true,
+      agentResumeRequested: result.isNew && resolved.agent?.resumeRequested === true,
       snapshot: result.snapshot,
       host: {
         protocolVersion: diagnostics.protocolVersion,

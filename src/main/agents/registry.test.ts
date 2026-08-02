@@ -127,4 +127,65 @@ describe('AgentRegistry', () => {
         ])
     ).toThrow('unknown action')
   })
+
+  it('rejects capability and integration declarations the runtime cannot honor', () => {
+    expect(
+      () =>
+        new AgentRegistry([
+          mutateDescriptor((descriptor) => {
+            ;(descriptor.capabilities as Record<string, boolean>)['resume'] = true
+          })
+        ])
+    ).toThrow('resume has no session identity')
+
+    const actionsWithoutImplementation = adapter('actions-only')
+    ;(
+      actionsWithoutImplementation.descriptor.settings as unknown as {
+        actions: unknown[]
+      }
+    ).actions = [{ id: 'enable', label: 'Enable', kind: 'integration-enable' }]
+    expect(() => new AgentRegistry([actionsWithoutImplementation])).toThrow(
+      'no implementation'
+    )
+
+    const integrationWithoutCapability = adapter('integration-no-capability')
+    Object.assign(integrationWithoutCapability, {
+      managedIntegration: {
+        diagnose: vi.fn(),
+        ensureInstalled: vi.fn(),
+        uninstall: vi.fn()
+      }
+    })
+    expect(() => new AgentRegistry([integrationWithoutCapability])).toThrow(
+      'no event capability'
+    )
+
+    const locatorWithoutIdentity = adapter('locator-no-identity')
+    Object.assign(locatorWithoutIdentity, {
+      sessionLocator: { snapshot: vi.fn(), findCreatedSession: vi.fn() }
+    })
+    expect(() => new AgentRegistry([locatorWithoutIdentity])).toThrow(
+      'no identity capability'
+    )
+  })
+
+  it('rejects select settings whose options or defaults are not self-consistent', () => {
+    expect(
+      () =>
+        new AgentRegistry([
+          mutateDescriptor((descriptor) => {
+            ;(descriptor.settings as unknown as { fields: unknown[] }).fields = [
+              {
+                key: 'mode',
+                label: 'Mode',
+                kind: 'select',
+                required: true,
+                defaultValue: 'missing',
+                options: [{ value: 'safe', label: 'Safe' }]
+              }
+            ]
+          })
+        ])
+    ).toThrow('Unsupported setting option')
+  })
 })

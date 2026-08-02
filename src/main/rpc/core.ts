@@ -12,6 +12,7 @@ import type {
 } from '../db/repositories'
 import type { BrowserWindow } from 'electron'
 import type { AgentRegistry } from '../agents/registry'
+import type { AgentSettingsService } from '../agents/settings-service'
 
 export interface RpcContext {
   repositories: {
@@ -21,6 +22,7 @@ export interface RpcContext {
     agentSettings: AgentSettingsRepo
   }
   agentRegistry: AgentRegistry
+  agentSettings: AgentSettingsService
   /** the requesting window; some methods (dialog) need it */
   sender: BrowserWindow | null
 }

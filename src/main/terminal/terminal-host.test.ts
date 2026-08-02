@@ -7,6 +7,7 @@ const ptyMock = vi.hoisted(() => ({ spawn: vi.fn() }))
 vi.mock('node-pty', () => ({ spawn: ptyMock.spawn }))
 
 import { TerminalHost } from './terminal-host'
+import { TERMINAL_HOST_PROTOCOL_VERSION } from './terminal-host-protocol'
 
 function fakePty(pid = 42) {
   let dataListener: DataListener | undefined
@@ -27,14 +28,17 @@ function fakePty(pid = 42) {
   }
 }
 
-function request(startupCommand?: string) {
+function request(env?: Record<string, string>) {
   return {
     sessionId: 'session:one',
     cols: 80,
     rows: 24,
     cwd: process.cwd(),
-    shell: { file: 'powershell.exe', args: ['-NoLogo'] },
-    ...(startupCommand === undefined ? {} : { startupCommand })
+    shell: {
+      file: 'powershell.exe',
+      args: ['-NoLogo'],
+      ...(env === undefined ? {} : { env })
+    }
   }
 }
 
@@ -50,7 +54,7 @@ describe('TerminalHost', () => {
 
     const created = host.createOrAttach(request())
     pty.emitData('prompt> ')
-    const attached = host.createOrAttach(request('must-not-run'))
+    const attached = host.createOrAttach(request({ MUST_NOT_REPLACE: '1' }))
 
     expect(created).toMatchObject({ id: 'session:one', pid: 42, isNew: true })
     expect(attached).toMatchObject({ isNew: false, snapshot: 'prompt> ' })
@@ -59,17 +63,24 @@ describe('TerminalHost', () => {
     expect(data).toHaveBeenCalledWith({ sessionId: 'session:one', data: 'prompt> ' })
   })
 
-  it('runs the startup command once, forwards I/O, and reports process exit', () => {
-    vi.useFakeTimers()
+  it('injects private environment at spawn without writing it into the terminal', () => {
     const pty = fakePty(88)
     ptyMock.spawn.mockReturnValue(pty)
     const host = new TerminalHost()
     const exit = vi.fn()
     host.on('exit', exit)
 
-    host.createOrAttach(request('opencode'))
-    vi.advanceTimersByTime(150)
-    expect(pty.write).toHaveBeenCalledWith('opencode\r')
+    host.createOrAttach(request({ DEVSTATION_AGENT_EVENT_TOKEN: 'private-token' }))
+    expect(ptyMock.spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoLogo'],
+      expect.objectContaining({
+        env: expect.objectContaining({
+          DEVSTATION_AGENT_EVENT_TOKEN: 'private-token'
+        })
+      })
+    )
+    expect(pty.write).not.toHaveBeenCalled()
     host.write('session:one', 'help\r')
     host.resize('session:one', 120, 40)
     expect(pty.write).toHaveBeenCalledWith('help\r')
@@ -83,7 +94,6 @@ describe('TerminalHost', () => {
       reason: 'exited'
     })
     expect(() => host.write('session:one', 'late')).toThrow('Terminal session not found')
-    vi.useRealTimers()
   })
 
   it('caps retained output and only kills a PTY on explicit close', () => {
@@ -119,7 +129,7 @@ describe('TerminalHost', () => {
     const host = new TerminalHost(7001, () => 1234)
 
     expect(host.diagnostics()).toEqual({
-      protocolVersion: 1,
+      protocolVersion: TERMINAL_HOST_PROTOCOL_VERSION,
       processId: 7001,
       startedAt: 1234,
       sessions: []
@@ -128,7 +138,7 @@ describe('TerminalHost', () => {
     pty.emitData('secret terminal output')
     expect(host.sessionCount).toBe(1)
     expect(host.diagnostics()).toEqual({
-      protocolVersion: 1,
+      protocolVersion: TERMINAL_HOST_PROTOCOL_VERSION,
       processId: 7001,
       startedAt: 1234,
       sessions: [
@@ -142,16 +152,20 @@ describe('TerminalHost', () => {
     })
   })
 
-  it('does not inject a delayed startup command after explicit close', () => {
-    vi.useFakeTimers()
+  it('does not replace a live PTY environment when another renderer reattaches', () => {
     const pty = fakePty()
     ptyMock.spawn.mockReturnValue(pty)
     const host = new TerminalHost()
-    host.createOrAttach(request('opencode'))
-    host.close('session:one')
-    vi.advanceTimersByTime(150)
-    expect(pty.write).not.toHaveBeenCalled()
-    vi.useRealTimers()
+    host.createOrAttach(request({ DEVSTATION_RUN_ID: 'first' }))
+    host.createOrAttach(request({ DEVSTATION_RUN_ID: 'second' }))
+    expect(ptyMock.spawn).toHaveBeenCalledOnce()
+    expect(ptyMock.spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoLogo'],
+      expect.objectContaining({
+        env: expect.objectContaining({ DEVSTATION_RUN_ID: 'first' })
+      })
+    )
   })
 
   it('can explicitly clean up every PTY owned by an isolated test profile', () => {

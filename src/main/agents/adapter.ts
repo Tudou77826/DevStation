@@ -2,7 +2,8 @@ import type {
   AgentAvailability,
   AgentDescriptor,
   AgentLaunchSpec,
-  AgentSessionRef
+  AgentSessionRef,
+  AgentSettingValue
 } from '@shared/agent'
 
 export interface AgentLaunchContext {
@@ -10,6 +11,7 @@ export interface AgentLaunchContext {
   devStationSessionId: string
   agentRunId: string
   executablePath?: string
+  settings: Readonly<Record<string, AgentSettingValue>>
 }
 
 export interface AgentSessionLocator {

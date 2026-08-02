@@ -9,7 +9,12 @@ import { randomUUID } from 'node:crypto'
 import type { Database, SqlValue } from './database'
 import { RpcError, notFound } from '../rpc/errors'
 import type { Project, Session, Task, TaskStatus } from '@shared/domain'
-import type { AgentEvent, AgentSessionRef, AgentUserSettings } from '@shared/agent'
+import type {
+  AgentEvent,
+  AgentSessionRef,
+  AgentSettingValue,
+  AgentUserSettings
+} from '@shared/agent'
 
 // ── Row → entity mappers (DB snake_case / 0|1 → domain) ──────────────────────
 
@@ -132,6 +137,8 @@ interface AgentSettingsRow {
   integration_enabled: number
   executable_path: string | null
   is_default: number
+  settings_version: number
+  settings_json: string
   updated_at: number
 }
 
@@ -142,7 +149,31 @@ function mapAgentSettings(row: AgentSettingsRow): AgentUserSettings {
     integrationEnabled: row.integration_enabled === 1,
     executablePath: row.executable_path,
     isDefault: row.is_default === 1,
+    schemaVersion: row.settings_version,
+    values: parseAgentSettingValues(row.settings_json),
     updatedAt: row.updated_at
+  }
+}
+
+function parseAgentSettingValues(value: string): Record<string, AgentSettingValue> {
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('Invalid stored Agent settings')
+    }
+    const result: Record<string, AgentSettingValue> = {}
+    for (const [key, candidate] of Object.entries(parsed)) {
+      if (typeof candidate !== 'string' && typeof candidate !== 'boolean') {
+        throw new Error('Invalid stored Agent settings')
+      }
+      result[key] = candidate
+    }
+    return result
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Invalid stored Agent settings') {
+      throw error
+    }
+    throw new Error('Invalid stored Agent settings', { cause: error })
   }
 }
 
@@ -561,8 +592,31 @@ export class AgentSettingsRepo {
       isDefault:
         stored?.isDefault === true ||
         (explicitDefault === undefined && agentId === fallbackDefaultAgentId),
+      schemaVersion: stored?.schemaVersion ?? 1,
+      values: stored?.values ?? {},
       updatedAt: stored?.updatedAt ?? null
     }
+  }
+
+  setValues(
+    agentId: string,
+    schemaVersion: number,
+    values: Readonly<Record<string, AgentSettingValue>>
+  ): AgentUserSettings {
+    const now = Date.now()
+    this.db
+      .prepare(
+        `INSERT INTO agent_settings
+           (agent_id, enabled, integration_enabled, executable_path, is_default,
+            settings_version, settings_json, updated_at)
+         VALUES (?, 1, 1, NULL, 0, ?, ?, ?)
+         ON CONFLICT(agent_id) DO UPDATE SET
+           settings_version = excluded.settings_version,
+           settings_json = excluded.settings_json,
+           updated_at = excluded.updated_at`
+      )
+      .run(agentId, schemaVersion, JSON.stringify(values), now)
+    return this.get(agentId)!
   }
 
   setExecutablePath(agentId: string, executablePath: string | null): AgentUserSettings {

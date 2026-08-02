@@ -84,12 +84,19 @@ const agentIntegrationActionParams = z
     action: z.enum(['enable', 'repair', 'disable'])
   })
   .strict()
+const agentSettingParams = z
+  .object({
+    agentId: agentIdSchema,
+    key: agentIdSchema,
+    value: z.union([z.string().max(PATH_MAX), z.boolean(), z.null()])
+  })
+  .strict()
 
 async function collectAgentDiagnostics(ctx: RpcContext): Promise<AgentDiagnosticEntry[]> {
   return Promise.all(
     ctx.agentRegistry.descriptors().map(async (descriptor) => {
       const adapter = ctx.agentRegistry.require(descriptor.id)
-      const settings = ctx.repositories.agentSettings.effective(descriptor.id)
+      const settings = ctx.agentSettings.effective(descriptor.id)
       const availability = await adapter.probe(settings.executablePath ?? undefined)
       const diagnostic = adapter.managedIntegration?.diagnose() ?? null
       return {
@@ -121,10 +128,10 @@ export function buildRegistry(): RpcRegistry {
   const reg = new RpcRegistry()
 
   reg.register(
-    method('agents.list', emptyParams, async (_p, { agentRegistry, repositories }) => {
+    method('agents.list', emptyParams, async (_p, { agentRegistry, agentSettings }) => {
       const available = await Promise.all(
         agentRegistry.catalog().map(async (entry) => {
-          const settings = repositories.agentSettings.effective(entry.descriptor.id)
+          const settings = agentSettings.effective(entry.descriptor.id)
           if (!settings.enabled) return null
           const probe = await agentRegistry.probe(
             entry.descriptor.id,
@@ -162,32 +169,48 @@ export function buildRegistry(): RpcRegistry {
         isFile = false
       }
       if (!isFile) throw invalidPath('请选择真实存在的可执行文件')
-      return ctx.repositories.agentSettings.setExecutablePath(p.agentId, executablePath)
+      ctx.repositories.agentSettings.setExecutablePath(p.agentId, executablePath)
+      return ctx.agentSettings.effective(p.agentId)
     })
   )
   reg.register(
     method('agents.clearExecutable', agentIdParams, (p, ctx) => {
       if (ctx.agentRegistry.get(p.agentId) === null) throw notFound('Coding Agent')
-      return ctx.repositories.agentSettings.setExecutablePath(p.agentId, null)
+      ctx.repositories.agentSettings.setExecutablePath(p.agentId, null)
+      return ctx.agentSettings.effective(p.agentId)
     })
   )
   reg.register(
     method('agents.setEnabled', agentEnabledParams, (p, ctx) => {
       if (ctx.agentRegistry.get(p.agentId) === null) throw notFound('Coding Agent')
-      return ctx.repositories.agentSettings.setEnabled(p.agentId, p.enabled)
+      ctx.repositories.agentSettings.setEnabled(p.agentId, p.enabled)
+      return ctx.agentSettings.effective(p.agentId)
     })
   )
   reg.register(
     method('agents.setDefault', agentIdParams, (p, ctx) => {
       if (ctx.agentRegistry.get(p.agentId) === null) throw notFound('Coding Agent')
-      return ctx.repositories.agentSettings.setDefault(p.agentId)
+      ctx.repositories.agentSettings.setDefault(p.agentId)
+      return ctx.agentSettings.effective(p.agentId)
+    })
+  )
+  reg.register(
+    method('agents.setSetting', agentSettingParams, (p, ctx) => {
+      try {
+        return ctx.agentSettings.setValue(p.agentId, p.key, p.value)
+      } catch (error) {
+        throw new RpcError(
+          'VALIDATION',
+          error instanceof Error ? error.message : 'Coding Agent 设置不合法'
+        )
+      }
     })
   )
   reg.register(
     method('agents.openLoginTerminal', agentIdParams, async (p, ctx) => {
       const adapter = ctx.agentRegistry.get(p.agentId)
       if (adapter === null) throw notFound('Coding Agent')
-      const settings = ctx.repositories.agentSettings.effective(p.agentId)
+      const settings = ctx.agentSettings.effective(p.agentId)
       const launch = adapter.buildLogin?.(settings.executablePath ?? undefined)
       if (launch === undefined) {
         throw new RpcError('CONFLICT', '该 Coding Agent 不需要独立登录终端')
@@ -309,17 +332,17 @@ export function buildRegistry(): RpcRegistry {
     method(
       'sessions.createFromTask',
       createSessionFromTaskParams,
-      (p, { repositories, agentRegistry }) => {
+      (p, { repositories, agentRegistry, agentSettings }) => {
         const task = repositories.tasks.get(p.taskId)
         if (task === null) throw notFound('任务')
         const agentId =
           p.agentId ??
           agentRegistry
             .descriptors()
-            .find(({ id }) => repositories.agentSettings.effective(id).isDefault)?.id ??
+            .find(({ id }) => agentSettings.effective(id).isDefault)?.id ??
           'opencode'
         if (agentRegistry.get(agentId) === null) throw notFound('Coding Agent')
-        if (!repositories.agentSettings.effective(agentId).enabled) {
+        if (!agentSettings.effective(agentId).enabled) {
           throw new RpcError('CONFLICT', '该 Coding Agent 已停用')
         }
         return repositories.sessions.createFromTask(p.taskId, agentId)
