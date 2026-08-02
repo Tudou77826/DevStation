@@ -11,7 +11,7 @@
 | `npm run verify:nightly` | PR 门禁 + 依赖、许可证、安全审计、Windows 构建 | 定时或手动全量验证   |
 | `npm run verify:release` | nightly + 打包态终端生命周期                   | 发布候选             |
 
-`test:terminal` 只验证真实 PTY，不绑定任何 Agent CLI，保证结果确定。Agent 适配通过固定命令契约、供应商数据适配测试和显式启用的本机 smoke 验证。Chrys smoke 使用 `DEVSTATION_CHRYS_SMOKE=1` 和 `DEVSTATION_CHRYS_BIN_DIR=<目录>` 启用，覆盖真实 TUI 启动、Hook 状态、原生 Session ID 绑定和 `-s` 冷恢复。
+`test:terminal` 只验证真实 PTY，不绑定任何 Agent CLI，保证结果确定。PR E2E 使用仅在 `DEVSTATION_E2E=1` 时注册的 Test Agent 验证多 Agent UI 与启动链路，不依赖供应商账户。真实适配由显式本机 smoke 验证；Chrys smoke 使用 `DEVSTATION_CHRYS_SMOKE=1` 和 `DEVSTATION_CHRYS_BIN_DIR=<目录>` 启用，覆盖真实 TUI 启动、Hook 状态、原生 Session ID 绑定和 `-s` 冷恢复。
 
 `test:event-bridge` 单独启动 PowerShell 验证 Electron 关闭时的原子事件写入。它在 PR 门禁中串行执行，不进入普通单测和覆盖率并发池，避免外部进程冷启动挤占 SQLite 测试预算。
 
@@ -26,7 +26,7 @@
 - 架构门禁：强制 Renderer → Preload → Main，阻止平台依赖泄漏到 Shared。
 - 供应链门禁：依赖树、许可证、安全审计和 Windows 构建。
 
-## 终端关键不变量
+## 终端与适配器关键不变量
 
 以下回归会直接丢失开发者工作，必须由测试守住：
 
@@ -37,8 +37,10 @@
 - 新 Agent Session 只绑定当前目录、本次启动后出现的供应商顶层会话。
 - 已保存且通过 Adapter 校验的原生引用才能进入冷恢复 argv；无效引用不得降级为新会话。
 - Adapter 只能返回结构化 executable、args 和 env；所有值由 Main 统一编码，不能拼接 Shell。
+- Descriptor 和设置 Schema 必须通过 Registry 的版本、能力、动作白名单及引用完整性校验后才能暴露给 UI。
+- 底层集成诊断的路径和错误原文不得跨 RPC 暴露；用户只接收状态对应的受控提示。
 - Agent 事件先原子落盘再归约；重复、乱序和旧 `agentRunId` 事件不得回退当前状态。
-- Electron 关闭期间的事件可在下次启动重放；坏文件被隔离且不能阻塞终端或其他有效事件。
+- Electron 关闭期间的事件可在下次启动重放，事件回执跨数据库重启仍能去重；坏文件被隔离且不能阻塞终端或其他有效事件。
 - 受管 Plugin 在普通 OpenCode 进程中必须静默，只能绑定当前目录、本次运行的目标顶层会话。
 - Chrys 受管 Hook 只能增量维护 DevStation 标识项；用户 Hook、注释和同名冲突必须保留。
 - Chrys 的会话、工作和结束状态必须来自生命周期 Hook；等待与恢复必须来自匹配 `ask_user` 的工具 Hook，并经同一事件 Bridge 落盘。

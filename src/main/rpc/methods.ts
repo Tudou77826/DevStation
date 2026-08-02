@@ -10,6 +10,7 @@ import { RpcRegistry, type RpcContext } from './core'
 import { RpcError, invalidPath, notFound } from './errors'
 import { resolveGitRepo } from '../git/validate'
 import { encodePowerShellInvocation } from '../agents/agent-launch'
+import type { ManagedIntegrationDiagnostic } from '../agents/adapter'
 
 // helper to define a method with params inferred from its schema
 function method<P, R>(
@@ -95,13 +96,23 @@ async function collectAgentDiagnostics(ctx: RpcContext): Promise<AgentDiagnostic
         descriptor,
         settings,
         availability,
-        integration:
-          diagnostic === null
-            ? null
-            : { state: diagnostic.state, message: diagnostic.message }
+        integration: diagnostic === null ? null : publicIntegrationDiagnostic(diagnostic)
       }
     })
   )
+}
+
+function publicIntegrationDiagnostic(
+  diagnostic: ManagedIntegrationDiagnostic
+): NonNullable<AgentDiagnosticEntry['integration']> {
+  const messages: Record<ManagedIntegrationDiagnostic['state'], string> = {
+    missing: '事件集成未安装',
+    current: '事件集成已就绪',
+    outdated: '事件集成需要修复或升级',
+    conflict: '事件集成与现有配置冲突',
+    unavailable: '事件集成当前不可用'
+  }
+  return { state: diagnostic.state, message: messages[diagnostic.state] }
 }
 
 // ── Build registry ───────────────────────────────────────────────────────────
@@ -201,11 +212,11 @@ export function buildRegistry(): RpcRegistry {
       if (p.action === 'disable') {
         const diagnostic = integration.uninstall()
         ctx.repositories.agentSettings.setIntegrationEnabled(p.agentId, false)
-        return { state: diagnostic.state, message: diagnostic.message }
+        return publicIntegrationDiagnostic(diagnostic)
       }
       ctx.repositories.agentSettings.setIntegrationEnabled(p.agentId, true)
       const diagnostic = integration.ensureInstalled()
-      return { state: diagnostic.state, message: diagnostic.message }
+      return publicIntegrationDiagnostic(diagnostic)
     })
   )
 

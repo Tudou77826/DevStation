@@ -1,6 +1,22 @@
 import type { AgentAvailability, AgentCatalogEntry, AgentDescriptor } from '@shared/agent'
 import type { CodingAgentAdapter } from './adapter'
 
+const SAFE_ID = /^[a-z0-9][a-z0-9._-]{0,63}$/
+const CAPABILITIES = [
+  'resume',
+  'sessionIdentity',
+  'activityEvents',
+  'transcript'
+] as const
+const FIELD_KINDS = new Set(['boolean', 'path', 'select'])
+const ACTION_KINDS = new Set([
+  'probe',
+  'open-login',
+  'integration-enable',
+  'integration-repair',
+  'integration-disable'
+])
+
 export class AgentRegistry {
   private readonly adapters = new Map<string, CodingAgentAdapter>()
 
@@ -9,10 +25,8 @@ export class AgentRegistry {
   }
 
   register(adapter: CodingAgentAdapter): void {
+    validateAdapterContract(adapter)
     const id = adapter.descriptor.id
-    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(id)) {
-      throw new Error(`Invalid Coding Agent id: ${id}`)
-    }
     if (this.adapters.has(id)) throw new Error(`Coding Agent already registered: ${id}`)
     this.adapters.set(id, adapter)
   }
@@ -40,4 +54,87 @@ export class AgentRegistry {
       descriptor: adapter.descriptor
     }))
   }
+}
+
+function validateAdapterContract(adapter: CodingAgentAdapter): void {
+  const descriptor = adapter.descriptor
+  if (descriptor === null || typeof descriptor !== 'object') {
+    throw new Error('Invalid Coding Agent descriptor')
+  }
+  if (!SAFE_ID.test(descriptor.id)) {
+    throw new Error(`Invalid Coding Agent id: ${descriptor.id}`)
+  }
+  requireText(descriptor.label, 'label')
+  if (typeof descriptor.description !== 'string') {
+    throw new Error(`Invalid Coding Agent description: ${descriptor.id}`)
+  }
+  if (descriptor.capabilities === null || typeof descriptor.capabilities !== 'object') {
+    throw new Error(`Invalid Coding Agent capabilities: ${descriptor.id}`)
+  }
+  for (const capability of CAPABILITIES) {
+    if (typeof descriptor.capabilities[capability] !== 'boolean') {
+      throw new Error(`Invalid Coding Agent capability: ${descriptor.id}.${capability}`)
+    }
+  }
+  if (
+    descriptor.settings === null ||
+    typeof descriptor.settings !== 'object' ||
+    !Array.isArray(descriptor.settings.fields) ||
+    !Array.isArray(descriptor.settings.actions) ||
+    !Number.isSafeInteger(descriptor.settings.version) ||
+    descriptor.settings.version < 1
+  ) {
+    throw new Error(`Invalid Coding Agent settings version: ${descriptor.id}`)
+  }
+
+  const fieldIds = new Set<string>()
+  for (const field of descriptor.settings.fields) {
+    requireUniqueId(field.key, fieldIds, `settings field for ${descriptor.id}`)
+    requireText(field.label, `settings field label for ${descriptor.id}`)
+    if (!FIELD_KINDS.has(field.kind) || typeof field.required !== 'boolean') {
+      throw new Error(
+        `Invalid Coding Agent settings field: ${descriptor.id}.${field.key}`
+      )
+    }
+  }
+
+  const actionIds = new Set<string>()
+  for (const action of descriptor.settings.actions) {
+    requireUniqueId(action.id, actionIds, `settings action for ${descriptor.id}`)
+    requireText(action.label, `settings action label for ${descriptor.id}`)
+    if (!ACTION_KINDS.has(action.kind)) {
+      throw new Error(
+        `Invalid Coding Agent settings action: ${descriptor.id}.${action.id}`
+      )
+    }
+    if (action.kind === 'open-login' && adapter.buildLogin === undefined) {
+      throw new Error(`Coding Agent login action has no implementation: ${descriptor.id}`)
+    }
+  }
+
+  if (!Array.isArray(descriptor.setupSteps)) {
+    throw new Error(`Invalid Coding Agent setup steps: ${descriptor.id}`)
+  }
+  const stepIds = new Set<string>()
+  for (const step of descriptor.setupSteps) {
+    requireUniqueId(step.id, stepIds, `setup step for ${descriptor.id}`)
+    requireText(step.title, `setup step title for ${descriptor.id}`)
+    requireText(step.description, `setup step description for ${descriptor.id}`)
+    if (step.actionId !== undefined && !actionIds.has(step.actionId)) {
+      throw new Error(
+        `Coding Agent setup step references an unknown action: ${descriptor.id}.${step.id}`
+      )
+    }
+  }
+}
+
+function requireUniqueId(value: string, seen: Set<string>, label: string): void {
+  if (!SAFE_ID.test(value) || seen.has(value))
+    throw new Error(`Invalid or duplicate ${label}: ${value}`)
+  seen.add(value)
+}
+
+function requireText(value: string, label: string): void {
+  if (typeof value !== 'string' || value.trim() === '')
+    throw new Error(`Invalid ${label}`)
 }
