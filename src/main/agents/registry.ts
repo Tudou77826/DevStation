@@ -1,4 +1,4 @@
-import type { AgentAvailability, AgentDescriptor } from '@shared/agent'
+import type { AgentAvailability, AgentCatalogEntry, AgentDescriptor } from '@shared/agent'
 import type { CodingAgentAdapter } from './adapter'
 
 export class AgentRegistry {
@@ -33,5 +33,11 @@ export class AgentRegistry {
 
   async probe(id: string): Promise<AgentAvailability> {
     return this.require(id).probe()
+  }
+
+  catalog(): AgentCatalogEntry[] {
+    return [...this.adapters.values()].map((adapter) => ({
+      descriptor: adapter.descriptor
+    }))
   }
 }

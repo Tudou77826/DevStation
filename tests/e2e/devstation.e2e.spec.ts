@@ -7,7 +7,7 @@ import {
 import { mkdtemp, rm } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 
 const workspaceRoot = process.cwd()
 
@@ -295,6 +295,127 @@ test('本机 OpenCode smoke：会话终端启动真实 OpenCode 进程', async (
       { encoding: 'utf8' }
     )
     expect(children.toLowerCase()).toContain('opencode')
+  } finally {
+    await closeQuietly(app)
+    await rm(profile, { recursive: true, force: true })
+  }
+})
+
+test('本机 Chrys smoke：会话终端启动真实 Chrys TUI 并接收生命周期事件', async () => {
+  const chrysBinDir = process.env['DEVSTATION_CHRYS_BIN_DIR']
+  test.skip(
+    process.env['DEVSTATION_CHRYS_SMOKE'] !== '1' || chrysBinDir === undefined,
+    '依赖显式指定的本机 Chrys 安装，不进入确定性 PR 门禁'
+  )
+  const profile = await mkdtemp(join(tmpdir(), 'devstation-chrys-e2e-'))
+  let app: ElectronApplication | null = null
+
+  try {
+    const path = `${chrysBinDir}${delimiter}${process.env['PATH'] ?? ''}`
+    app = await launch(profile, {
+      DEVSTATION_E2E_PROJECT_PATH: workspaceRoot,
+      PATH: path,
+      APPDATA: join(profile, 'integrations')
+    })
+    const page = await app.firstWindow()
+    await page.getByRole('button', { name: 'AI 空间' }).click()
+    await page.getByRole('button', { name: '添加本地项目' }).click()
+    await page.getByRole('button', { name: '任务面板' }).click()
+    await page.getByTitle('新建任务').click()
+    const title = page.getByLabel('任务标题')
+    await title.fill('Chrys smoke')
+    await title.press('Enter')
+    await page.getByLabel('关联项目').selectOption({ label: 'DevStation' })
+    await page.getByLabel('Coding Agent').selectOption('chrys')
+    await page.getByRole('button', { name: '新建工作会话' }).click()
+
+    await page.getByRole('button', { name: /Chrys smoke 会话/ }).click()
+    await expect(page.getByText(/Chrys · PowerShell · PID \d+/)).toBeVisible()
+    const header = await page.getByText(/Chrys · PowerShell · PID \d+/).textContent()
+    const powershellPid = header?.match(/PID (\d+)/)?.[1]
+    expect(powershellPid).toBeTruthy()
+    await expect
+      .poll(
+        () =>
+          execFileSync(
+            'powershell.exe',
+            [
+              '-NoProfile',
+              '-NonInteractive',
+              '-Command',
+              `(Get-CimInstance Win32_Process -Filter "ParentProcessId = ${powershellPid}").CommandLine`
+            ],
+            { encoding: 'utf8' }
+          ).toLowerCase(),
+        { timeout: 15_000 }
+      )
+      .toContain('chrys')
+
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const tasks = await window.devstation.rpc.invoke('tasks.list', {
+              keyword: 'Chrys smoke'
+            })
+            if (!tasks.ok || tasks.result.length === 0) return null
+            const sessions = await window.devstation.rpc.invoke('sessions.listByTask', {
+              taskId: tasks.result[0].id
+            })
+            if (!sessions.ok || sessions.result.length === 0) return null
+            return sessions.result[0].agentSessionRef?.value ?? ''
+          }),
+        { timeout: 30_000 }
+      )
+      .toMatch(/^[0-9a-f-]{36}$/i)
+    const nativeSessionId = await page.evaluate(async () => {
+      const tasks = await window.devstation.rpc.invoke('tasks.list', {
+        keyword: 'Chrys smoke'
+      })
+      if (!tasks.ok || tasks.result.length === 0) throw new Error('Smoke task not found')
+      const sessions = await window.devstation.rpc.invoke('sessions.listByTask', {
+        taskId: tasks.result[0].id
+      })
+      if (!sessions.ok || sessions.result.length === 0) {
+        throw new Error('Smoke session not found')
+      }
+      const value = sessions.result[0].agentSessionRef?.value
+      if (value === undefined) throw new Error('Chrys session id was not bound')
+      return value
+    })
+
+    await page.getByRole('button', { name: '结束进程' }).click()
+    await expect(page.getByRole('button', { name: '重新连接' })).toBeVisible({
+      timeout: 15_000
+    })
+    await page.getByRole('button', { name: '重新连接' }).click()
+    await expect(page.getByText('已恢复会话')).toBeVisible({ timeout: 15_000 })
+    const resumedHeader = await page
+      .getByText(/Chrys · PowerShell · PID \d+/)
+      .textContent()
+    const resumedPowershellPid = resumedHeader?.match(/PID (\d+)/)?.[1]
+    expect(resumedPowershellPid).toBeTruthy()
+    expect(resumedPowershellPid).not.toBe(powershellPid)
+    await expect
+      .poll(
+        () =>
+          execFileSync(
+            'powershell.exe',
+            [
+              '-NoProfile',
+              '-NonInteractive',
+              '-Command',
+              `(Get-CimInstance Win32_Process -Filter "ParentProcessId = ${resumedPowershellPid}").CommandLine`
+            ],
+            { encoding: 'utf8' }
+          ).toLowerCase(),
+        { timeout: 15_000 }
+      )
+      .toContain(nativeSessionId.toLowerCase())
+
+    await page.getByRole('button', { name: '任务面板' }).click()
+    await expect(page.getByText('Chrys smoke 会话')).toBeVisible()
+    await expect(page.getByText('启动中')).toBeVisible({ timeout: 15_000 })
   } finally {
     await closeQuietly(app)
     await rm(profile, { recursive: true, force: true })

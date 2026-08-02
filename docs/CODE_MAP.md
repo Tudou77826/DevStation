@@ -24,6 +24,7 @@
 | Agent 注册与运行编排  | [`src/main/agents/`](../src/main/agents/)                                                                                                                | [接入指南](./ADDING_CODING_AGENT.md)、契约测试 |
 | Agent 事件与离线重放  | [`agent-event-inbox.ts`](../src/main/agents/agent-event-inbox.ts)                                                                                        | 事件解析、Bridge、收件箱与 Schema v5 测试      |
 | OpenCode 适配         | [`opencode-adapter.ts`](../src/main/agents/opencode-adapter.ts)、[`opencode-managed-integration.ts`](../src/main/agents/opencode-managed-integration.ts) | Adapter、会话定位与 Plugin 事件映射测试        |
+| Chrys 适配            | [`chrys-adapter.ts`](../src/main/agents/chrys-adapter.ts)、[`chrys-managed-integration.ts`](../src/main/agents/chrys-managed-integration.ts)             | Adapter、Hook 增量合并与真实 Bridge 映射测试   |
 | PowerShell Shell 选择 | [`launch-spec.ts`](../src/main/terminal/launch-spec.ts)                                                                                                  | `launch-spec.test.ts`                          |
 | Git 仓库校验          | [`src/main/git/`](../src/main/git/)                                                                                                                      | `validate.test.ts`                             |
 | 设置与能力事实        | [`panes.tsx`](../src/renderer/src/components/settings/panes.tsx)                                                                                         | `panes.test.tsx`                               |

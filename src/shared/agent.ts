@@ -50,6 +50,10 @@ export interface AgentAvailability {
   message: string | null
 }
 
+export interface AgentCatalogEntry {
+  descriptor: AgentDescriptor
+}
+
 export interface AgentSessionRef {
   kind: string
   value: string

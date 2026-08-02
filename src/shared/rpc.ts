@@ -5,6 +5,7 @@
 // maps to its Zod-typed params and TS result type, so callers get static typing
 // and the dispatcher only accepts registered methods.
 import type { Project, Session, Task, TaskStatus } from './domain'
+import type { AgentCatalogEntry } from './agent'
 
 export type RpcErrorCode =
   | 'VALIDATION'
@@ -60,6 +61,9 @@ export interface ProjectsCreateParams {
 export interface TaskIdParam {
   taskId: string
 }
+export interface CreateSessionFromTaskParam extends TaskIdParam {
+  agentId?: string
+}
 export interface ProjectIdParam {
   projectId: string
 }
@@ -67,6 +71,7 @@ export interface ProjectIdParam {
 // ── The whitelist map: method name → { params, result } ──────────────────────
 
 export interface RpcMethodMap {
+  'agents.list': { params: Record<string, never>; result: AgentCatalogEntry[] }
   'tasks.list': { params: TasksListParams; result: Task[] }
   'tasks.create': { params: TasksCreateParams; result: Task }
   'tasks.update': { params: TasksUpdateParams; result: Task }
@@ -83,7 +88,7 @@ export interface RpcMethodMap {
   'projects.create': { params: ProjectsCreateParams; result: Project }
   'projects.delete': { params: IdParam; result: { ok: true } }
 
-  'sessions.createFromTask': { params: TaskIdParam; result: Session }
+  'sessions.createFromTask': { params: CreateSessionFromTaskParam; result: Session }
   'sessions.listByTask': { params: TaskIdParam; result: Session[] }
   'sessions.listByProject': { params: ProjectIdParam; result: Session[] }
   'sessions.touch': { params: IdParam; result: Session }

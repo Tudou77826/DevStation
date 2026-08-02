@@ -32,6 +32,7 @@ function makeRegistry(): RpcRegistry {
 
 const ctx: RpcContext = {
   repositories: {} as RpcContext['repositories'],
+  agentRegistry: {} as RpcContext['agentRegistry'],
   sender: null
 }
 

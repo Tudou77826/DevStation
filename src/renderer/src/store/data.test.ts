@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Project, Session, Task } from '@shared/domain'
+import type { AgentCatalogEntry } from '@shared/agent'
 import type { RpcResponse } from '@shared/rpc'
 
 const invoke = vi.fn()
@@ -36,6 +37,22 @@ const project = (id: string): Project => ({
   updatedAt: 1
 })
 
+const agent = (id: string): AgentCatalogEntry => ({
+  descriptor: {
+    id,
+    label: id === 'chrys' ? 'Chrys' : 'OpenCode',
+    description: '',
+    capabilities: {
+      resume: true,
+      sessionIdentity: true,
+      activityEvents: true,
+      transcript: false
+    },
+    settings: { version: 1, fields: [], actions: [] },
+    setupSteps: []
+  }
+})
+
 const session = (id: string, patch: Partial<Session> = {}): Session => ({
   id,
   taskId: 't1',
@@ -61,6 +78,7 @@ const fail = (code = 'INTERNAL', message = '失败'): RpcResponse<never> => ({
 
 function resetStore(): void {
   useDataStore.setState({
+    agents: [],
     tasks: [],
     projects: [],
     sessionsByTask: {},
@@ -77,16 +95,35 @@ describe('renderer data store', () => {
   })
 
   it('loads tasks and projects together and clears loading', async () => {
-    invoke.mockImplementation(async (method: string) =>
-      method === 'tasks.list' ? ok([task('t1')]) : ok([project('p1')])
-    )
+    invoke.mockImplementation(async (method: string) => {
+      if (method === 'tasks.list') return ok([task('t1')])
+      if (method === 'projects.list') return ok([project('p1')])
+      return ok([agent('chrys')])
+    })
     await useDataStore.getState().loadAll()
     expect(useDataStore.getState()).toMatchObject({
       tasks: [task('t1')],
       projects: [project('p1')],
+      agents: [agent('chrys')],
       loading: false,
       error: null
     })
+  })
+
+  it('loads the Agent catalog and preserves the last usable catalog on failure', async () => {
+    invoke.mockResolvedValueOnce(ok([agent('opencode'), agent('chrys')]))
+    await expect(useDataStore.getState().loadAgents()).resolves.toEqual([
+      agent('opencode'),
+      agent('chrys')
+    ])
+    expect(invoke).toHaveBeenCalledWith('agents.list', {})
+
+    invoke.mockResolvedValueOnce(fail('INTERNAL', 'Agent 检测失败'))
+    await expect(useDataStore.getState().loadAgents()).resolves.toEqual([
+      agent('opencode'),
+      agent('chrys')
+    ])
+    expect(useDataStore.getState().error).toBe('Agent 检测失败')
   })
 
   it('surfaces load failures without leaving the spinner active', async () => {
@@ -215,9 +252,13 @@ describe('renderer data store', () => {
       .mockResolvedValueOnce(ok(created))
       .mockResolvedValueOnce(ok([created]))
       .mockResolvedValueOnce(ok([created]))
-    await expect(useDataStore.getState().createSessionFromTask('t1')).resolves.toEqual(
-      created
-    )
+    await expect(
+      useDataStore.getState().createSessionFromTask('t1', 'chrys')
+    ).resolves.toEqual(created)
+    expect(invoke).toHaveBeenCalledWith('sessions.createFromTask', {
+      taskId: 't1',
+      agentId: 'chrys'
+    })
     expect(useDataStore.getState().sessionsByTask.t1).toEqual([created])
     expect(useDataStore.getState().sessionsByProject.p1).toEqual([created])
 

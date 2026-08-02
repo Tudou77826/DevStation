@@ -58,7 +58,7 @@ interface CodingAgentAdapter {
 }
 ```
 
-能力通过 `descriptor.capabilities` 声明，至少区分 `resume`、`sessionIdentity`、`activityEvents` 和 `transcript`。`descriptor` 同时提供版本化的设置字段与引导步骤，设置页据此渲染，不为 OpenCode、Claude Code 编写独立页面。核心只调用已声明的能力；没有事件能力的 Agent 仍可使用终端，但状态显示为“不可用/未知”，不能用 PTY 存活推断“正在工作”。
+能力通过 `descriptor.capabilities` 声明，至少区分 `resume`、`sessionIdentity`、`activityEvents` 和 `transcript`。`descriptor` 同时提供版本化的设置字段与引导步骤，设置页据此渲染，不为 OpenCode、Chrys 编写独立页面。核心只调用已声明的能力；没有事件能力的 Agent 仍可使用终端，但状态显示为“不可用/未知”，不能用 PTY 存活推断“正在工作”。
 
 ### 扩展层级与设置模型
 
@@ -110,12 +110,12 @@ flowchart LR
 
 ### 首批适配策略
 
-| Agent          | 启动与恢复               | 会话引用                      | 状态来源                                  | 计划                    |
-| -------------- | ------------------------ | ----------------------------- | ----------------------------------------- | ----------------------- |
-| OpenCode       | `opencode` / `--session` | Plugin 事件优先，本地索引兜底 | Plugin 的 session、permission、error 事件 | M4 迁入通用适配层       |
-| Claude Code    | `claude` / `--resume`    | `SessionStart` Hook           | Session、Notification、Stop 等 Hook       | M4 作为第二个真实适配器 |
-| Codex          | `codex` / `codex resume` | `SessionStart` Hook           | 生命周期 Hook                             | M4 后按相同契约接入     |
-| 其他 CLI Agent | 由适配器声明             | 可选                          | Hook、Plugin、协议或无事件降级            | 不修改核心即可增加      |
+| Agent          | 启动与恢复               | 会话引用                      | 状态来源                                  | 计划                |
+| -------------- | ------------------------ | ----------------------------- | ----------------------------------------- | ------------------- |
+| OpenCode       | `opencode` / `--session` | Plugin 事件优先，本地索引兜底 | Plugin 的 session、permission、error 事件 | M4 迁入通用适配层   |
+| Chrys          | `chrys` / `-s`           | 生命周期与工具 Hook           | Turn、`ask_user` 等待与结束事件           | M4 第二个真实适配器 |
+| Codex          | `codex` / `codex resume` | `SessionStart` Hook           | 生命周期 Hook                             | M4 后按相同契约接入 |
+| 其他 CLI Agent | 由适配器声明             | 可选                          | Hook、Plugin、协议或无事件降级            | 不修改核心即可增加  |
 
 M4 不接入任何 Agent 的程序化对话协议，也不替换原生 TUI。当前产品主区仍是 PowerShell；程序化协议作为未来“原生对话 UI”能力，而不是多 Agent 的前置条件。
 
@@ -152,13 +152,16 @@ M4 不接入任何 Agent 的程序化对话协议，也不替换原生 TUI。当
 
 验收：OpenCode 状态来自真实事件；Plugin 只跟踪当前目录的目标顶层会话，历史会话和子会话不会误绑定；没有 Plugin 时仍可运行和恢复，且 UI 不伪造 Agent 状态。
 
-### M4.4：Claude Code 第二适配器
+### M4.4：Chrys 第二适配器
 
-- `[L4]` 实现 Claude Code CLI 探测、启动、`claude --resume <id>` 和引用校验。
-- `[L5]` 增量接入 Claude Code 生命周期 Hook，并映射原生 Session ID、工作、等待、完成和失败事件。
-- `[L3]` 为历史会话保留 Agent 标签；本机缺少 Claude Code 或 Hook 未启用时给出可执行提示。
+状态：已完成。Chrys 使用原生 TUI 启动与 `-s <id>` 恢复；受管 Hook 增量接入用户配置，真实上报会话、工作、等待、完成、失败和结束状态。会话创建可选择 OpenCode 或 Chrys。实机 smoke 已验证原生 TUI 启动、Session ID 绑定和冷恢复。
 
-验收：用户可以在创建会话时选择 OpenCode 或 Claude Code；两者共用相同的运行、状态、搜索和恢复链路。
+- `[L4]` 实现 Chrys CLI 探测、启动、`chrys -s <id>` 和 UUID/旧版引用校验。
+- `[L5]` 增量接入 Chrys 生命周期 Hook；同名用户 Hook 冲突时拒绝覆盖，普通 Chrys 进程保持静默。
+- `[L4]` 复用 Chrys 现有 `before/after_tool_call` 并匹配 `ask_user`，准确区分工作与等待，不修改 Chrys 核心。
+- `[L3]` 创建会话时通过通用 Agent Catalog 选择已注册 Agent；CLI 探测与修复入口归入 M4.5。
+
+验收：用户可以在创建会话时选择 OpenCode 或 Chrys；两者共用运行、状态和恢复链路。Chrys Hook 安装、修复、卸载不丢失用户 Hook 与注释；真实 Hook payload 可写入统一事件收件箱。
 
 ### M4.5：Coding Agent 设置中心与会话 UI
 
@@ -170,18 +173,18 @@ M4 不接入任何 Agent 的程序化对话协议，也不替换原生 TUI。当
 - `[L2]` 提供标题/项目搜索、最近访问以及 Agent/状态筛选。
 - `[L4]` 处理 CLI 消失、事件集成缺失、原生会话不存在和恢复失败。
 
-验收：用户不编辑 JSON、Hook 文件或环境变量即可完成 OpenCode/Claude Code 的发现、启用、事件集成和故障修复；新增内置 Adapter 后，设置页无需新增供应商专属组件即可展示其通用设置。
+验收：用户不编辑 JSON、Hook 文件或环境变量即可完成 OpenCode/Chrys 的发现、启用、事件集成和故障修复；新增内置 Adapter 后，设置页无需新增供应商专属组件即可展示其通用设置。
 
 ### M4.6：测试门禁
 
 - `[L4]` 建立适配器契约测试，覆盖 argv 安全、能力降级、引用校验、事件归一化和配置合并/卸载。
 - `[L3]` 覆盖 Descriptor/设置 Schema 版本、路径覆盖、动作白名单、脱敏诊断和未知设置迁移。
 - `[L4]` 覆盖事件去重、乱序、跨重启重放和旧运行隔离。
-- `[L3]` E2E 使用可控测试适配器验证多 Agent UI；真实 OpenCode/Claude Code smoke 保持显式启用。
+- `[L3]` E2E 使用可控测试适配器验证多 Agent UI；真实 OpenCode/Chrys smoke 保持显式启用。
 
 `test:terminal` 继续只验证真实 PTY，不依赖任何 Agent CLI；确定性门禁不要求开发机登录供应商账户。
 
-M4 完成标准：OpenCode 与 Claude Code 均可通过设置中心完成启用、诊断、新建和恢复；用户能找到目标会话并判断状态可信度；Electron 重启不丢失当前运行和最新 Agent 状态；增加第三个内置 Agent 时无需修改终端核心、数据库状态模型或设置/会话 UI 的供应商逻辑。
+M4 完成标准：OpenCode 与 Chrys 均可通过设置中心完成启用、诊断、新建和恢复；用户能找到目标会话并判断状态可信度；Electron 重启不丢失当前运行和最新 Agent 状态；增加第三个内置 Agent 时无需修改终端核心、数据库状态模型或设置/会话 UI 的供应商逻辑。
 
 ## M5：Git 与 Diff 评审
 
