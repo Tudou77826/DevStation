@@ -44,8 +44,7 @@ export const SECONDARY_NAV: Record<NavSection, readonly NavSecondaryItem[]> = {
   ]
 } as const
 
-// ── Mock domain data: REMOVED in Stage 2 ────────────────────────────────────
-// Task/Project/Session now live in the SQLite-backed data store
+// Task/Project/Session live in the SQLite-backed data store
 // (src/renderer/src/store/data.ts) via the RPC layer. The nav store keeps only
 // UI navigation state (active section, selection, panel widths).
 

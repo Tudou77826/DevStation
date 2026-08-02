@@ -62,4 +62,52 @@ describe('navigation work context persistence', () => {
       expandedProjectIds: ['project-1']
     })
   })
+
+  it('keeps navigation and panel controls inside the persisted work context', async () => {
+    const { secondaryIdOf, useNavStore } = await import('./nav')
+    const actions = useNavStore.getState()
+
+    actions.setSection('workflow')
+    useNavStore.getState().setSecondary('templates')
+    useNavStore.getState().toggleSidebar()
+    useNavStore.getState().selectTask('task-2')
+    useNavStore.getState().selectSession('session-without-project', null)
+    useNavStore.getState().selectSession('session-2', 'project-2')
+    useNavStore.getState().toggleProjectExpanded('project-3')
+    useNavStore.getState().toggleProjectExpanded('project-3')
+    useNavStore.getState().toggleProjectExpanded('project-3')
+    useNavStore.getState().showAiRightPanel('files')
+    useNavStore.getState().closeRightPanel()
+    useNavStore.getState().openRightPanel()
+    useNavStore.getState().toggleRightPanel()
+    useNavStore.getState().setSidebarWidth(280)
+    useNavStore.getState().setSidebarWidth(100)
+    useNavStore.getState().setRightPanelWidth(360)
+    useNavStore.getState().setRightPanelWidth(900)
+
+    const state = useNavStore.getState()
+    expect(secondaryIdOf(state, 'workflow')).toBe('templates')
+    expect(state).toMatchObject({
+      activeSection: 'workflow',
+      sidebarCollapsed: true,
+      selectedTaskId: 'task-2',
+      selectedProjectId: 'project-2',
+      selectedSessionId: 'session-2',
+      expandedProjectIds: ['project-2', 'project-3'],
+      rightPanelOpen: false,
+      aiRightPanelView: 'files',
+      sidebarWidth: 200,
+      rightPanelWidth: 480
+    })
+
+    const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}') as {
+      state?: Record<string, unknown>
+    }
+    expect(persisted.state).toMatchObject({
+      activeSection: 'workflow',
+      selectedSessionId: 'session-2',
+      sidebarWidth: 200,
+      rightPanelWidth: 480
+    })
+  })
 })

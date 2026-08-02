@@ -1,4 +1,4 @@
-// Domain entities (Stage 2). Shared by Main (DB rows), Preload, Renderer.
+// Durable domain entities shared by Main, Preload and Renderer.
 // Field shapes mirror the SQLite schema in src/main/db/schema.ts.
 // Times are epoch milliseconds (Date.now()), timezone-agnostic.
 

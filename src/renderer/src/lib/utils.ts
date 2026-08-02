@@ -1,6 +1,5 @@
-// Lightweight class-name combiner (replaces clsx + tailwind-merge for the MVP).
-// Concatenates truthy values; later conflict resolution is not needed yet
-// because Stage 1 styling is static per component.
+// Lightweight class-name combiner. It concatenates truthy values; callers are
+// responsible for avoiding conflicting utility classes.
 export function cn(...parts: ReadonlyArray<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ')
 }
