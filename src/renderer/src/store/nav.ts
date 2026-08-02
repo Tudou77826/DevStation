@@ -4,7 +4,10 @@
 // center remains a single workspace. Details, files and changes belong to the
 // contextual right inspector rather than introducing another nested split.
 import { create } from 'zustand'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import type { NavSection } from '@shared/types'
+
+export const NAV_STORAGE_KEY = 'devstation.navigation'
 
 export interface NavPrimaryItem {
   id: NavSection
@@ -86,61 +89,87 @@ interface NavState {
   setRightPanelWidth: (w: number) => void
 }
 
-export const useNavStore = create<NavState>((set) => ({
-  activeSection: 'tasks',
-  activeSecondaryId: {
-    tasks: 'all',
-    'ai-space': 'sessions',
-    workflow: 'overview'
-  },
-  sidebarCollapsed: false,
-  selectedTaskId: 't-1',
-  selectedProjectId: null,
-  selectedSessionId: null,
-  expandedProjectIds: [],
-  rightPanelOpen: true,
-  aiRightPanelView: 'changes',
-  sidebarWidth: 240,
-  rightPanelWidth: 320,
+export const useNavStore = create<NavState>()(
+  persist(
+    (set) => ({
+      activeSection: 'tasks',
+      activeSecondaryId: {
+        tasks: 'all',
+        'ai-space': 'sessions',
+        workflow: 'overview'
+      },
+      sidebarCollapsed: false,
+      selectedTaskId: null,
+      selectedProjectId: null,
+      selectedSessionId: null,
+      expandedProjectIds: [],
+      rightPanelOpen: true,
+      aiRightPanelView: 'changes',
+      sidebarWidth: 240,
+      rightPanelWidth: 320,
 
-  setSection: (section) => set({ activeSection: section }),
-  setSecondary: (id) =>
-    set((s) => ({
-      activeSecondaryId: { ...s.activeSecondaryId, [s.activeSection]: id }
-    })),
-  toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-  selectTask: (id) => set({ selectedTaskId: id }),
-  selectProject: (id) =>
-    set((state) => ({
-      selectedProjectId: id,
-      selectedSessionId: state.selectedProjectId === id ? state.selectedSessionId : null,
-      expandedProjectIds:
-        id !== null && !state.expandedProjectIds.includes(id)
-          ? [...state.expandedProjectIds, id]
-          : state.expandedProjectIds
-    })),
-  selectSession: (id, projectId) =>
-    set((state) => ({
-      selectedSessionId: id,
-      selectedProjectId: projectId,
-      expandedProjectIds:
-        projectId !== null && !state.expandedProjectIds.includes(projectId)
-          ? [...state.expandedProjectIds, projectId]
-          : state.expandedProjectIds
-    })),
-  toggleProjectExpanded: (id) =>
-    set((state) => ({
-      expandedProjectIds: state.expandedProjectIds.includes(id)
-        ? state.expandedProjectIds.filter((projectId) => projectId !== id)
-        : [...state.expandedProjectIds, id]
-    })),
-  toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
-  openRightPanel: () => set({ rightPanelOpen: true }),
-  closeRightPanel: () => set({ rightPanelOpen: false }),
-  showAiRightPanel: (view) => set({ aiRightPanelView: view, rightPanelOpen: true }),
-  setSidebarWidth: (w) => set({ sidebarWidth: clamp(w, 200, 360) }),
-  setRightPanelWidth: (w) => set({ rightPanelWidth: clamp(w, 260, 480) })
-}))
+      setSection: (section) => set({ activeSection: section }),
+      setSecondary: (id) =>
+        set((s) => ({
+          activeSecondaryId: { ...s.activeSecondaryId, [s.activeSection]: id }
+        })),
+      toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      selectTask: (id) => set({ selectedTaskId: id }),
+      selectProject: (id) =>
+        set((state) => ({
+          selectedProjectId: id,
+          // Selecting a project means its plain PowerShell workspace. Agent
+          // sessions remain explicit second-level tree selections.
+          selectedSessionId: null,
+          expandedProjectIds:
+            id !== null && !state.expandedProjectIds.includes(id)
+              ? [...state.expandedProjectIds, id]
+              : state.expandedProjectIds
+        })),
+      selectSession: (id, projectId) =>
+        set((state) => ({
+          selectedSessionId: id,
+          selectedProjectId: projectId,
+          expandedProjectIds:
+            projectId !== null && !state.expandedProjectIds.includes(projectId)
+              ? [...state.expandedProjectIds, projectId]
+              : state.expandedProjectIds
+        })),
+      toggleProjectExpanded: (id) =>
+        set((state) => ({
+          expandedProjectIds: state.expandedProjectIds.includes(id)
+            ? state.expandedProjectIds.filter((projectId) => projectId !== id)
+            : [...state.expandedProjectIds, id]
+        })),
+      toggleRightPanel: () => set((s) => ({ rightPanelOpen: !s.rightPanelOpen })),
+      openRightPanel: () => set({ rightPanelOpen: true }),
+      closeRightPanel: () => set({ rightPanelOpen: false }),
+      showAiRightPanel: (view) => set({ aiRightPanelView: view, rightPanelOpen: true }),
+      setSidebarWidth: (w) => set({ sidebarWidth: clamp(w, 200, 360) }),
+      setRightPanelWidth: (w) => set({ rightPanelWidth: clamp(w, 260, 480) })
+    }),
+    {
+      name: NAV_STORAGE_KEY,
+      version: 1,
+      storage: createJSONStorage(() => localStorage),
+      // Persist only restorable UI facts. Actions and transient domain data
+      // remain owned by Zustand and SQLite respectively.
+      partialize: (state) => ({
+        activeSection: state.activeSection,
+        activeSecondaryId: state.activeSecondaryId,
+        sidebarCollapsed: state.sidebarCollapsed,
+        selectedTaskId: state.selectedTaskId,
+        selectedProjectId: state.selectedProjectId,
+        selectedSessionId: state.selectedSessionId,
+        expandedProjectIds: state.expandedProjectIds,
+        rightPanelOpen: state.rightPanelOpen,
+        aiRightPanelView: state.aiRightPanelView,
+        sidebarWidth: state.sidebarWidth,
+        rightPanelWidth: state.rightPanelWidth
+      })
+    }
+  )
+)
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))

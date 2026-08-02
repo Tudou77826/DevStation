@@ -1,7 +1,12 @@
 // Preload runs in an isolated world: it is the ONLY bridge between the sandboxed
 // Renderer and Node/Electron capabilities. Expose a whitelisted, frozen API.
 import { contextBridge, ipcRenderer } from 'electron'
-import type { DevStationAPI, TerminalDataEvent, TerminalExitEvent } from '@shared/types'
+import type {
+  DevStationAPI,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  TerminalHostStateEvent
+} from '@shared/types'
 
 const api: DevStationAPI = {
   version: process.env['npm_package_version'] ?? '0.0.0',
@@ -11,7 +16,8 @@ const api: DevStationAPI = {
     update: (theme: 'dark' | 'light') => ipcRenderer.invoke('theme:update', theme)
   },
   terminal: {
-    create: (request) => ipcRenderer.invoke('terminal:create', request),
+    connect: (request) => ipcRenderer.invoke('terminal:connect', request),
+    disconnect: (sessionId) => ipcRenderer.invoke('terminal:disconnect', sessionId),
     write: (sessionId, data) => ipcRenderer.invoke('terminal:write', sessionId, data),
     resize: (sessionId, cols, rows) =>
       ipcRenderer.invoke('terminal:resize', sessionId, cols, rows),
@@ -31,6 +37,14 @@ const api: DevStationAPI = {
       ): void => listener(payload)
       ipcRenderer.on('terminal:exit', handler)
       return () => ipcRenderer.removeListener('terminal:exit', handler)
+    },
+    onHostState: (listener) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        payload: TerminalHostStateEvent
+      ): void => listener(payload)
+      ipcRenderer.on('terminal:host-state', handler)
+      return () => ipcRenderer.removeListener('terminal:host-state', handler)
     }
   },
   rpc: {

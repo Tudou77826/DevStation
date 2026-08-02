@@ -5,15 +5,19 @@ import { SessionList } from './SessionList'
 
 const mocks = vi.hoisted(() => {
   const state = {
-    sessionsByTask: {} as Record<string, never[]>,
-    sessionsByProject: {} as Record<string, never[]>,
+    sessionsByTask: {} as Record<string, Array<Record<string, unknown>>>,
+    sessionsByProject: {} as Record<string, Array<Record<string, unknown>>>,
     loadSessionsByTask: vi.fn(async () => []),
     loadSessionsByProject: vi.fn(async () => []),
     createSessionFromTask: vi.fn(async () => null),
     touchSession: vi.fn(async () => undefined),
     errorMessage: vi.fn(() => '加载失败')
   }
-  return { state }
+  const nav = {
+    setSection: vi.fn(),
+    selectSession: vi.fn()
+  }
+  return { state, nav }
 })
 
 vi.mock('@/store/data', () => {
@@ -24,9 +28,15 @@ vi.mock('@/store/data', () => {
   return { useDataStore }
 })
 
+vi.mock('@/store/nav', () => ({
+  useNavStore: (selector: (state: typeof mocks.nav) => unknown) => selector(mocks.nav)
+}))
+
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  mocks.state.sessionsByTask = {}
+  mocks.state.sessionsByProject = {}
 })
 
 describe('SessionList', () => {
@@ -44,5 +54,58 @@ describe('SessionList', () => {
     await waitFor(() =>
       expect(mocks.state.createSessionFromTask).toHaveBeenCalledWith('task-2')
     )
+  })
+
+  it('opens a task session in its AI workspace and records recent use', async () => {
+    mocks.state.sessionsByTask = {
+      'task-3': [
+        {
+          id: 'session-3',
+          taskId: 'task-3',
+          projectId: 'project-1',
+          title: '修复登录会话',
+          status: 'idle',
+          agentType: 'opencode',
+          agentSessionId: null,
+          lastOpenedAt: null,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        }
+      ]
+    }
+    render(<SessionList taskId="task-3" />)
+    await waitFor(() => expect(screen.getByText('修复登录会话')).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: /修复登录会话/ }))
+
+    expect(mocks.nav.selectSession).toHaveBeenCalledWith('session-3', 'project-1')
+    expect(mocks.nav.setSection).toHaveBeenCalledWith('ai-space')
+    expect(mocks.state.touchSession).toHaveBeenCalledWith('session-3')
+  })
+
+  it('explains why a legacy session without a project cannot be opened', async () => {
+    mocks.state.sessionsByTask = {
+      'task-4': [
+        {
+          id: 'session-4',
+          taskId: 'task-4',
+          projectId: null,
+          title: '未关联会话',
+          status: 'idle',
+          agentType: 'opencode',
+          agentSessionId: null,
+          lastOpenedAt: null,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        }
+      ]
+    }
+    render(<SessionList taskId="task-4" />)
+    await waitFor(() => expect(screen.getByText('未关联会话')).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: /未关联会话/ }))
+
+    expect(screen.getByText(/请先为任务关联本地项目/)).toBeTruthy()
+    expect(mocks.nav.selectSession).not.toHaveBeenCalled()
   })
 })

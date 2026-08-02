@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => {
     projectId: project.id,
     title: 'Agent 验收会话',
     status: 'idle' as const,
+    agentType: 'opencode' as const,
+    agentSessionId: null,
     lastOpenedAt: null,
     createdAt: 1,
     updatedAt: 1

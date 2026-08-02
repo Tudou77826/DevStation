@@ -6,7 +6,7 @@ DevStation 是面向 AI 辅助研发的本地桌面工作台。MVP 以一条顺�
 创建任务 → 关联 Git 项目 → 创建工作会话 → 运行 CLI Agent → 跟踪状态 → 评审 Diff
 ```
 
-当前已完成任务、项目、会话的本地持久化，具备基础 Shell/Codex 终端和质量门禁；Agent Hook、会话恢复和 Diff 仍在后续计划中。
+当前已完成任务、项目、会话的本地持久化，以及 PowerShell 热接回和 OpenCode 原生会话恢复；Agent Hook、会话搜索和 Diff 仍在后续计划中。
 
 技术栈：Electron、React、TypeScript、electron-vite、SQLite、xterm.js、node-pty。
 

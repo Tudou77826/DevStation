@@ -7,7 +7,7 @@
 import type { Database } from './database'
 
 /** Current schema version. Bump when adding migrations. */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 const CREATE_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   title          TEXT NOT NULL DEFAULT '',
   status         TEXT NOT NULL DEFAULT 'idle'
                  CHECK(status IN ('idle','running','waiting','done','failed')),
+  agent_type     TEXT NOT NULL DEFAULT 'opencode'
+                 CHECK(agent_type IN ('opencode')),
+  agent_session_id TEXT,
   last_opened_at INTEGER,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
@@ -66,6 +69,12 @@ WHEN NEW.pinned NOT IN (0, 1)
 BEGIN
   SELECT RAISE(ABORT, 'tasks.pinned must be 0 or 1');
 END;
+`
+
+const SESSION_AGENT_SQL = `
+ALTER TABLE sessions ADD COLUMN agent_type TEXT NOT NULL DEFAULT 'opencode'
+  CHECK(agent_type IN ('opencode'));
+ALTER TABLE sessions ADD COLUMN agent_session_id TEXT;
 `
 
 /** Create the initial tables/indexes. Called only from the migration transaction. */
@@ -94,8 +103,7 @@ export function migrate(db: Database): void {
     // v2 also protects databases created by the pre-release v1 schema, which
     // did not yet have the pinned CHECK constraint.
     if (storedVersion < 2) db.exec(PINNED_GUARD_SQL)
-    // Future steps:
-    //   if (storedVersion < 3) { db.exec('ALTER TABLE ...'); }
+    if (storedVersion < 3 && storedVersion >= 1) db.exec(SESSION_AGENT_SQL)
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   })
 }

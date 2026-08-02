@@ -1,8 +1,10 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { dirname, join } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import { TerminalManager } from './terminal/terminal-manager'
+import { TerminalHostClient } from './terminal/terminal-host-client'
+import { OpenCodeSessionLocator } from './terminal/opencode-session-locator'
 import { Database } from './db/database'
 import { initializeDatabase } from './db/schema'
 import { ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
@@ -21,8 +23,24 @@ if (!app.isPackaged && process.env['DEVSTATION_E2E'] === '1' && e2eUserDataDir) 
   app.setPath('userData', e2eUserDataDir)
 }
 
+// The packaged lifecycle smoke needs an isolated profile without touching a
+// developer's real data. Restrict the override to an explicit smoke flag and
+// our own temporary-directory prefix; ordinary production launches cannot
+// redirect the database or terminal host endpoint.
+const packagedSmokeUserDataDir = process.env['DEVSTATION_PACKAGED_SMOKE_USER_DATA_DIR']
+if (
+  app.isPackaged &&
+  process.env['DEVSTATION_PACKAGED_SMOKE'] === '1' &&
+  packagedSmokeUserDataDir &&
+  isAbsolute(packagedSmokeUserDataDir) &&
+  basename(packagedSmokeUserDataDir).startsWith('devstation-packaged-terminal-')
+) {
+  mkdirSync(packagedSmokeUserDataDir, { recursive: true })
+  app.setPath('userData', packagedSmokeUserDataDir)
+}
+
 let mainWindow: BrowserWindow | null = null
-const terminalManager = new TerminalManager()
+let terminalManager: TerminalManager | null = null
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
 if (!hasSingleInstanceLock) app.quit()
@@ -102,7 +120,7 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
   })
-  terminalManager.watch(mainWindow.webContents)
+  terminalManager?.watch(mainWindow.webContents)
 
   // Open external links in the system browser, never inside the app.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -186,6 +204,15 @@ void app.whenReady().then(() => {
     if (senderWindow !== null) applyWindowChrome(senderWindow, theme)
     return true
   })
+  const terminalHost = new TerminalHostClient({
+    userDataPath: app.getPath('userData'),
+    hostEntryPath: join(__dirname, 'terminal-host.js')
+  })
+  terminalManager = new TerminalManager({
+    host: terminalHost,
+    repositories,
+    openCodeSessions: new OpenCodeSessionLocator()
+  })
   terminalManager.registerIpc()
   createWindow()
 
@@ -209,8 +236,21 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
-  terminalManager.dispose()
+let e2eShutdownStarted = false
+app.on('before-quit', (event) => {
+  if (
+    process.env['DEVSTATION_E2E'] === '1' &&
+    process.env['DEVSTATION_E2E_KEEP_TERMINAL_HOST'] !== '1' &&
+    terminalManager !== null &&
+    !e2eShutdownStarted
+  ) {
+    event.preventDefault()
+    e2eShutdownStarted = true
+    void terminalManager.shutdownHost().finally(() => app.quit())
+    return
+  }
+  terminalManager?.dispose()
+  terminalManager = null
   db?.close()
   db = null
 })

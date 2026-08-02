@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { AISpaceWorkArea } from '@/components/workarea/AISpaceWorkArea'
 import { TaskPanel } from '@/components/tasks/TaskPanel'
@@ -37,10 +37,17 @@ export default function App(): React.ReactElement {
   const rightPanelOpen = useNavStore((s) => s.rightPanelOpen)
   const settingsOpen = useUIStore((s) => s.settingsOpen)
   const loadAll = useDataStore((s) => s.loadAll)
+  const [dataReady, setDataReady] = useState(false)
 
   // Hydrate SQLite-backed data on startup so lists are ready for any section.
   useEffect(() => {
-    void loadAll()
+    let active = true
+    void loadAll().finally(() => {
+      if (active) setDataReady(true)
+    })
+    return () => {
+      active = false
+    }
   }, [loadAll])
 
   if (settingsOpen) {
@@ -61,13 +68,33 @@ export default function App(): React.ReactElement {
         <Sidebar />
 
         <main className="flex min-w-0 flex-1 flex-col">
-          {section === 'tasks' && <TaskPanel />}
-          {section === 'ai-space' && <AISpaceWorkArea />}
-          {section === 'workflow' && <WorkflowPanel />}
+          {!dataReady ? (
+            <WorkspaceRestoring />
+          ) : (
+            <>
+              {section === 'tasks' && <TaskPanel />}
+              {section === 'ai-space' && <AISpaceWorkArea />}
+              {section === 'workflow' && <WorkflowPanel />}
+            </>
+          )}
         </main>
 
-        {rightPanelOpen ? <RightPanel /> : <RightPanelDock />}
+        {dataReady && (rightPanelOpen ? <RightPanel /> : <RightPanelDock />)}
       </div>
     </div>
+  )
+}
+
+function WorkspaceRestoring(): React.ReactElement {
+  return (
+    <section
+      className="flex min-h-0 flex-1 items-center justify-center bg-background"
+      aria-label="正在恢复工作区"
+    >
+      <div className="flex items-center gap-2 text-[12px] text-muted-foreground">
+        <span className="size-1.5 animate-pulse rounded-full bg-muted-foreground/70" />
+        正在恢复工作区…
+      </div>
+    </section>
   )
 }

@@ -68,6 +68,8 @@ interface SessionRow {
   project_id: string | null
   title: string
   status: string
+  agent_type: string
+  agent_session_id: string | null
   last_opened_at: number | null
   created_at: number
   updated_at: number
@@ -79,6 +81,8 @@ function mapSession(r: SessionRow): Session {
     projectId: r.project_id,
     title: r.title,
     status: r.status as Session['status'],
+    agentType: r.agent_type as Session['agentType'],
+    agentSessionId: r.agent_session_id,
     lastOpenedAt: r.last_opened_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at
@@ -341,8 +345,9 @@ export class SessionRepo {
     this.db
       .prepare(
         `INSERT INTO sessions (id, task_id, project_id, title, status,
-                               last_opened_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'idle', ?, ?, ?)`
+                               agent_type, agent_session_id, last_opened_at,
+                               created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'idle', 'opencode', NULL, ?, ?, ?)`
       )
       .run(id, taskId, task.project_id, title, now, now, now)
     return this.get(id)!
@@ -355,6 +360,19 @@ export class SessionRepo {
     this.db
       .prepare('UPDATE sessions SET last_opened_at = ? WHERE id = ?')
       .run(Date.now(), id)
+    return this.get(id)!
+  }
+
+  setAgentSession(id: string, agentSessionId: string): Session {
+    const existing = this.get(id)
+    if (existing === null) throw notFound('会话')
+    this.db
+      .prepare(
+        `UPDATE sessions
+         SET agent_type = 'opencode', agent_session_id = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(agentSessionId, Date.now(), id)
     return this.get(id)!
   }
 }

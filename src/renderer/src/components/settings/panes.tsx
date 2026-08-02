@@ -75,23 +75,41 @@ export function GeneralPane(): React.ReactElement {
   return (
     <SettingsSection id="general" title="通用" description="应用的基础行为与默认值。">
       <SettingsRow
-        label="启动时恢复上次会话"
-        description="重新打开 DevStation 时，自动定位到上次使用的任务与工作会话。"
-        control={<SettingsSwitch checked onChange={() => {}} ariaLabel="恢复会话" />}
+        label="启动时恢复工作现场"
+        description="自动恢复上次使用的一级入口、任务、项目、Agent 会话和面板布局。"
+        control={<FactValue tone="active">已启用</FactValue>}
       />
       <SettingsRow
-        label="自动刷新 Git 状态"
-        description="当 Agent 修改文件后，自动检测工作区变更。"
-        control={<SettingsSwitch checked onChange={() => {}} ariaLabel="自动刷新 Git" />}
+        label="Git 状态与 Diff"
+        description="当前仅校验 Git 项目目录；状态刷新和 Diff 评审将在 M5 接入。"
+        control={<FactValue>M5</FactValue>}
       />
       <SettingsRow
         label="发送匿名使用统计"
-        description="帮助我们改进 DevStation。不包含任何代码或敏感数据。"
-        control={
-          <SettingsSwitch checked={false} onChange={() => {}} ariaLabel="使用统计" />
-        }
+        description="当前版本不采集或发送使用统计。"
+        control={<FactValue>未启用</FactValue>}
       />
     </SettingsSection>
+  )
+}
+
+function FactValue({
+  children,
+  tone = 'neutral'
+}: {
+  children: React.ReactNode
+  tone?: 'neutral' | 'active'
+}): React.ReactElement {
+  return (
+    <span
+      className={
+        tone === 'active'
+          ? 'rounded-md border border-status-success/25 bg-status-success/10 px-2.5 py-1 text-[11px] font-medium text-status-success'
+          : 'rounded-md border border-border bg-background px-2.5 py-1 text-[11px] text-muted-foreground'
+      }
+    >
+      {children}
+    </span>
   )
 }
 
@@ -100,8 +118,8 @@ export function TerminalPane(): React.ReactElement {
     <SettingsSection
       id="terminal"
       title="终端"
-      badge="阶段 3"
-      description="本地终端与 CLI Agent 运行相关配置。完整能力将在阶段 3 接入。"
+      badge="M3.2 可用"
+      description="AI 主工作区使用本地 PowerShell，并通过独立 PTY 宿主保持运行和接回。"
     >
       <SettingsRow
         label="默认 Shell"
@@ -117,7 +135,7 @@ export function TerminalPane(): React.ReactElement {
         description="终端文字大小（像素）。"
         control={
           <span className="rounded-md border border-border bg-background px-2.5 py-1 text-[12px] text-muted-foreground">
-            14 px
+            13 px
           </span>
         }
       />
@@ -147,12 +165,12 @@ export function AboutPane(): React.ReactElement {
         </div>
         <div>
           <div className="text-[15px] font-semibold text-foreground">DevStation</div>
-          <div className="text-[12px] text-muted-foreground">版本 0.1.0 · MVP 阶段 1</div>
+          <div className="text-[12px] text-muted-foreground">版本 0.1.0 · MVP M3.2</div>
         </div>
       </div>
       <p className="max-w-xl py-2 text-[13px] leading-relaxed text-muted-foreground">
-        本地 AI 辅助研发桌面应用。验证一条本地研发链路：手动建任务 → 关联 Git 项目 → 运行
-        CLI Agent → 跟踪状态 → 查看 Diff → 人工提交。
+        本地 AI 辅助研发桌面应用。当前已打通手动建任务、关联 Git 项目、创建工作会话和运行
+        OpenCode 的本地闭环；Hook 状态与 Diff 评审仍在建设中。
       </p>
       <div className="py-2">
         <a

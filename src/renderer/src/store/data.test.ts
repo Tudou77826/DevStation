@@ -42,6 +42,8 @@ const session = (id: string, patch: Partial<Session> = {}): Session => ({
   projectId: null,
   title: `Session ${id}`,
   status: 'idle',
+  agentType: 'opencode',
+  agentSessionId: null,
   lastOpenedAt: null,
   createdAt: 1,
   updatedAt: 1,

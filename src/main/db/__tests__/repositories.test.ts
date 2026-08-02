@@ -164,6 +164,18 @@ describe('SessionRepo + cascade', () => {
       const s = sessions.createFromTask(t.id)
       expect(s.taskId).toBe(t.id)
       expect(s.projectId).toBe('proj-1') // snapshot
+      expect(s).toMatchObject({ agentType: 'opencode', agentSessionId: null })
+    })
+  })
+
+  it('stores the native OpenCode session id used for cold resume', () => {
+    withDb((db) => {
+      const { tasks, sessions } = repos(db)
+      const task = tasks.create({ title: 'Resume me' })
+      const created = sessions.createFromTask(task.id)
+      const bound = sessions.setAgentSession(created.id, 'ses_native-1')
+      expect(bound.agentSessionId).toBe('ses_native-1')
+      expect(sessions.get(created.id)?.agentSessionId).toBe('ses_native-1')
     })
   })
 
