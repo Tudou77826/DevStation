@@ -7,7 +7,7 @@
 import type { Database } from './database'
 
 /** Current schema version. Bump when adding migrations. */
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 const CREATE_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -50,12 +50,26 @@ CREATE TABLE IF NOT EXISTS sessions (
   agent_status_source TEXT NOT NULL DEFAULT 'none'
                  CHECK(agent_status_source IN ('none','provider-event')),
   agent_status_updated_at INTEGER,
+  agent_status_event_id TEXT,
   last_opened_at INTEGER,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_task    ON sessions(task_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id);
+
+CREATE TABLE IF NOT EXISTS agent_event_receipts (
+  event_id      TEXT PRIMARY KEY,
+  session_id    TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  agent_run_id  TEXT NOT NULL,
+  agent_id      TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  occurred_at   INTEGER NOT NULL,
+  received_at   INTEGER NOT NULL,
+  outcome       TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_agent_event_receipts_session
+  ON agent_event_receipts(session_id, occurred_at);
 `
 
 const PINNED_GUARD_SQL = `
@@ -124,6 +138,23 @@ CREATE INDEX idx_sessions_task    ON sessions(task_id);
 CREATE INDEX idx_sessions_project ON sessions(project_id);
 `
 
+const AGENT_EVENT_INBOX_SQL = `
+ALTER TABLE sessions ADD COLUMN agent_status_event_id TEXT;
+
+CREATE TABLE agent_event_receipts (
+  event_id      TEXT PRIMARY KEY,
+  session_id    TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  agent_run_id  TEXT NOT NULL,
+  agent_id      TEXT NOT NULL,
+  kind          TEXT NOT NULL,
+  occurred_at   INTEGER NOT NULL,
+  received_at   INTEGER NOT NULL,
+  outcome       TEXT NOT NULL
+);
+CREATE INDEX idx_agent_event_receipts_session
+  ON agent_event_receipts(session_id, occurred_at);
+`
+
 /** Create the initial tables/indexes. Called only from the migration transaction. */
 export function createTables(db: Database): void {
   db.exec(CREATE_SQL)
@@ -152,6 +183,7 @@ export function migrate(db: Database): void {
     if (storedVersion < 2) db.exec(PINNED_GUARD_SQL)
     if (storedVersion < 3 && storedVersion >= 1) db.exec(SESSION_AGENT_SQL)
     if (storedVersion < 4 && storedVersion >= 1) db.exec(OPEN_AGENT_SCHEMA_SQL)
+    if (storedVersion < 5 && storedVersion >= 1) db.exec(AGENT_EVENT_INBOX_SQL)
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   })
 }

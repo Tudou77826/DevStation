@@ -4,6 +4,7 @@ import type { Session } from '@shared/domain'
 import type { CodingAgentAdapter } from './adapter'
 import { AgentRegistry } from './registry'
 import { AgentRuntimeService } from './runtime-service'
+import type { ManagedEventBridge } from './managed-event-bridge'
 
 function session(ref: AgentSessionRef | null = null, agentId = 'test-agent'): Session {
   return {
@@ -23,7 +24,13 @@ function session(ref: AgentSessionRef | null = null, agentId = 'test-agent'): Se
   }
 }
 
-function harness(options: { ref?: AgentSessionRef | null; agentId?: string } = {}) {
+function harness(
+  options: {
+    ref?: AgentSessionRef | null
+    agentId?: string
+    eventBridge?: Pick<ManagedEventBridge, 'enrichLaunchSpec'>
+  } = {}
+) {
   const sessionValue = session(options.ref ?? null, options.agentId ?? 'test-agent')
   const locator = {
     snapshot: vi.fn((): ReadonlySet<string> => new Set(['before'])),
@@ -74,7 +81,8 @@ function harness(options: { ref?: AgentSessionRef | null; agentId?: string } = {
     registry: new AgentRegistry([adapter]),
     sessions,
     createRunId: () => 'run-1',
-    now: () => now
+    now: () => now,
+    ...(options.eventBridge === undefined ? {} : { eventBridge: options.eventBridge })
   })
   return { runtime, sessions, adapter, locator, setNow: (value: number) => (now = value) }
 }
@@ -138,6 +146,23 @@ describe('AgentRuntimeService', () => {
       prepared
     })
     expect(h.sessions.startAgentRun).not.toHaveBeenCalled()
+  })
+
+  it('adds the provider-neutral event identity after the adapter builds its launch', () => {
+    const eventBridge = {
+      enrichLaunchSpec: vi.fn((spec) => ({ ...spec, env: { EVENT_BRIDGE: 'ready' } }))
+    }
+    const h = harness({ eventBridge })
+    const prepared = h.runtime.prepareSession('session-1', 'C:\\repo')
+    expect(eventBridge.enrichLaunchSpec).toHaveBeenCalledWith(
+      { executable: 'test-agent', args: [], env: {} },
+      {
+        agentId: 'test-agent',
+        devStationSessionId: 'session-1',
+        agentRunId: 'run-1'
+      }
+    )
+    expect(prepared.launchSpec.env).toEqual({ EVENT_BRIDGE: 'ready' })
   })
 
   it('rejects unknown adapters and invalid stored references instead of starting fresh', () => {

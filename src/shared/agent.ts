@@ -61,3 +61,20 @@ export interface AgentLaunchSpec {
   args: readonly string[]
   env: Readonly<Record<string, string>>
 }
+
+/** Versioned, provider-neutral events accepted by DevStation's offline inbox. */
+export const AGENT_EVENT_VERSION = 1 as const
+
+export type AgentEventKind =
+  'session-bound' | 'started' | 'working' | 'waiting' | 'done' | 'failed' | 'ended'
+
+export interface AgentEvent {
+  version: typeof AGENT_EVENT_VERSION
+  eventId: string
+  agentId: string
+  devStationSessionId: string
+  agentRunId: string
+  kind: AgentEventKind
+  occurredAt: number
+  sessionRef?: AgentSessionRef
+}

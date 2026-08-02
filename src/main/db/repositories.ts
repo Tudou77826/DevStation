@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import type { Database, SqlValue } from './database'
 import { RpcError, notFound } from '../rpc/errors'
 import type { Project, Session, Task, TaskStatus } from '@shared/domain'
-import type { AgentSessionRef } from '@shared/agent'
+import type { AgentEvent, AgentSessionRef } from '@shared/agent'
 
 // ── Row → entity mappers (DB snake_case / 0|1 → domain) ──────────────────────
 
@@ -74,6 +74,7 @@ interface SessionRow {
   agent_run_id: string | null
   agent_status_source: string
   agent_status_updated_at: number | null
+  agent_status_event_id: string | null
   last_opened_at: number | null
   created_at: number
   updated_at: number
@@ -423,10 +424,114 @@ export class SessionRepo {
       .prepare(
         `UPDATE sessions
          SET agent_run_id = ?, status = 'unknown', agent_status_source = 'none',
-             agent_status_updated_at = NULL, updated_at = ?
+             agent_status_updated_at = NULL, agent_status_event_id = NULL, updated_at = ?
          WHERE id = ?`
       )
       .run(agentRunId, Date.now(), id)
     return this.get(id)!
   }
+
+  /**
+   * Atomically records and reduces one provider-neutral Agent event.
+   * The receipt makes replay idempotent even if deleting the inbox file fails.
+   */
+  applyAgentEvent(event: AgentEvent, receivedAt = Date.now()): AgentEventApplyResult {
+    return this.db.transaction(() => {
+      const duplicate = this.db
+        .prepare('SELECT outcome FROM agent_event_receipts WHERE event_id = ?')
+        .get(event.eventId) as { outcome: AgentEventOutcome } | undefined
+      if (duplicate !== undefined) {
+        return { outcome: 'duplicate', session: this.get(event.devStationSessionId) }
+      }
+
+      const row = asRow<SessionRow>(
+        this.db
+          .prepare('SELECT * FROM sessions WHERE id = ?')
+          .get(event.devStationSessionId)
+      )
+      if (row === undefined) return { outcome: 'unknown-session', session: null }
+
+      let outcome: AgentEventReceiptOutcome
+      if (row.agent_id !== event.agentId || row.agent_run_id !== event.agentRunId) {
+        outcome = 'stale-run'
+      } else if (event.kind === 'session-bound') {
+        if (event.sessionRef === undefined) {
+          throw new Error('session-bound event requires a validated session reference')
+        }
+        this.db
+          .prepare(
+            `UPDATE sessions
+             SET agent_session_ref = ?, updated_at = ?
+             WHERE id = ?`
+          )
+          .run(JSON.stringify(event.sessionRef), receivedAt, event.devStationSessionId)
+        outcome = 'applied-ref'
+      } else if (isOlderStatusEvent(row, event)) {
+        outcome = 'stale-status'
+      } else if (
+        event.kind === 'ended' &&
+        (row.status === 'done' || row.status === 'failed')
+      ) {
+        outcome = 'preserved-terminal'
+      } else {
+        const nextStatus =
+          event.kind === 'ended'
+            ? 'unknown'
+            : event.kind === 'started'
+              ? 'starting'
+              : event.kind
+        this.db
+          .prepare(
+            `UPDATE sessions
+             SET status = ?, agent_status_source = 'provider-event',
+                 agent_status_updated_at = ?, agent_status_event_id = ?, updated_at = ?
+             WHERE id = ?`
+          )
+          .run(
+            nextStatus,
+            event.occurredAt,
+            event.eventId,
+            receivedAt,
+            event.devStationSessionId
+          )
+        outcome = 'applied-status'
+      }
+
+      this.db
+        .prepare(
+          `INSERT INTO agent_event_receipts
+           (event_id, session_id, agent_run_id, agent_id, kind, occurred_at, received_at, outcome)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .run(
+          event.eventId,
+          event.devStationSessionId,
+          event.agentRunId,
+          event.agentId,
+          event.kind,
+          event.occurredAt,
+          receivedAt,
+          outcome
+        )
+      return { outcome, session: this.get(event.devStationSessionId) }
+    })
+  }
+}
+
+export type AgentEventReceiptOutcome =
+  'applied-status' | 'applied-ref' | 'stale-run' | 'stale-status' | 'preserved-terminal'
+
+export type AgentEventOutcome = AgentEventReceiptOutcome | 'duplicate' | 'unknown-session'
+
+export interface AgentEventApplyResult {
+  outcome: AgentEventOutcome
+  session: Session | null
+}
+
+function isOlderStatusEvent(row: SessionRow, event: AgentEvent): boolean {
+  if (row.agent_status_updated_at === null) return false
+  if (event.occurredAt !== row.agent_status_updated_at) {
+    return event.occurredAt < row.agent_status_updated_at
+  }
+  return row.agent_status_event_id !== null && event.eventId <= row.agent_status_event_id
 }

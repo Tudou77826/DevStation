@@ -22,6 +22,7 @@
 | 宿主协议与客户端      | [`terminal-host-client.ts`](../src/main/terminal/terminal-host-client.ts)            | 握手、断连和请求生命周期测试                   |
 | 宿主进程入口          | [`terminal-host-entry.ts`](../src/main/terminal/terminal-host-entry.ts)              | Electron 跨重启 E2E                            |
 | Agent 注册与运行编排  | [`src/main/agents/`](../src/main/agents/)                                            | [接入指南](./ADDING_CODING_AGENT.md)、契约测试 |
+| Agent 事件与离线重放  | [`agent-event-inbox.ts`](../src/main/agents/agent-event-inbox.ts)                    | 事件解析、Bridge、收件箱与 Schema v5 测试      |
 | OpenCode 适配         | [`opencode-adapter.ts`](../src/main/agents/opencode-adapter.ts)                      | Adapter 与只读会话定位器测试                   |
 | PowerShell Shell 选择 | [`launch-spec.ts`](../src/main/terminal/launch-spec.ts)                              | `launch-spec.test.ts`                          |
 | Git 仓库校验          | [`src/main/git/`](../src/main/git/)                                                  | `validate.test.ts`                             |
@@ -54,4 +55,4 @@ shared/types.ts
 
 终端链路变更需同时检查：`TerminalPane → Preload → TerminalManager → HostClient → TerminalHost`。任何 UI 生命周期修改都必须证明 disconnect 不等于 close。
 
-Coding Agent 启动、恢复、探测和原生会话发现从 `src/main/agents/` 开始；TerminalManager 只消费统一运行结果。目标边界见[实施计划中的适配设计](./PLAN.md#coding-agent-适配设计)。
+Coding Agent 启动、恢复、探测、原生会话发现和事件重放从 `src/main/agents/` 开始；TerminalManager 只消费统一运行结果。事件状态只由版本化 `AgentEvent` 更新，PTY 生命周期不是 Agent 状态来源。目标边界见[实施计划中的适配设计](./PLAN.md#coding-agent-适配设计)。
