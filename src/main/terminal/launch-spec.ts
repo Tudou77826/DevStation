@@ -17,11 +17,3 @@ export function resolvePowerShellLaunch(
   const shell = env['SHELL']?.trim() || '/bin/bash'
   return { file: shell, args: ['-l'] }
 }
-
-export function openCodeStartupCommand(agentSessionId: string | null): string {
-  if (agentSessionId === null) return 'opencode'
-  if (!/^ses_[A-Za-z0-9_-]{1,120}$/.test(agentSessionId)) {
-    throw new Error('Invalid OpenCode session id')
-  }
-  return `opencode --session ${agentSessionId}`
-}

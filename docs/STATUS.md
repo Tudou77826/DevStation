@@ -1,6 +1,6 @@
 # DevStation 当前状态
 
-DevStation 已完成 M3.2，打通“任务—项目—会话—OpenCode 终端”的本地运行闭环。下一步进入 M4 状态与会话管理；Hook 状态、会话搜索和 Diff 评审尚未完成。
+DevStation 已完成 M4.1：OpenCode 运行闭环已迁入通用 Coding Agent 适配层，终端核心不再包含供应商分支。下一步建设 M4.2 可靠事件通道；Claude Code、Agent 状态 UI 和 Diff 评审尚未完成。
 
 ## 当前能力
 
@@ -8,11 +8,12 @@ DevStation 已完成 M3.2，打通“任务—项目—会话—OpenCode 终端�
 | ------------ | -------- | ---------------------------------------------------------------------- |
 | 桌面工作台   | 可用     | 主区单层；右栏跟随上下文；重启恢复入口、选中项、树展开和面板布局       |
 | 任务与项目   | 可用     | 任务 CRUD、状态、搜索、项目关联与 Git 目录校验                         |
-| 工作会话     | 可用     | 按项目树展示，关联任务并固化创建时项目，绑定 OpenCode 原生 Session ID  |
-| SQLite       | 可用     | Schema v3、原子迁移、降级拒绝和外键约束                                |
+| 工作会话     | 可用     | 固定 `agentId`，保存结构化原生会话引用、当前运行代次与状态来源         |
+| SQLite       | 可用     | Schema v4；v3 绑定无损迁移，支持开放 Agent ID、原子迁移与降级拒绝      |
 | PowerShell   | 可用     | AI 主区固定终端；输入、resize、有限快照、显式停止和退出原因反馈        |
 | PTY 热接回   | 可用     | 独立宿主持有 PTY；支持协议握手、诊断、断连反馈、应用重启接回和空闲回收 |
-| OpenCode     | 基础可用 | 新建执行 `opencode`；首次交互后记录原生 ID；PTY 已结束时恢复历史会话   |
+| Agent 适配层 | 基础可用 | Registry、能力描述、结构化 argv、CLI 探测、运行服务和会话引用校验      |
+| OpenCode     | 基础可用 | 启动、恢复、CLI 探测和只读会话发现均封装在首个内置 Adapter             |
 | 工作流       | 展示占位 | 已有 AAW 流程和模板界面，但尚未连接 CLI、真实状态、产物与持久化        |
 | Agent 状态   | 未完成   | 尚无 Hook、等待用户状态和完成/失败同步                                 |
 | Git Diff     | 未完成   | 只有仓库校验；状态、Diff 和评论尚未实现                                |
@@ -38,25 +39,32 @@ flowchart LR
     Preload["Preload：白名单 API"]
     Main["Main：权限、上下文与 IPC"]
     DB["SQLite：任务、项目、会话绑定"]
+    Runtime["Agent Runtime / Registry"]
+    Adapter["OpenCode Adapter"]
+    Terminal["TerminalManager"]
     Host["独立 Terminal Host：稳定 PTY"]
     OC["OpenCode：TUI 与原生会话"]
 
     UI --> Preload --> Main
     Main --> DB
-    Main -->|连接 / 脱离 / I/O| Host
+    Main --> Runtime --> Adapter
+    Main --> Terminal
+    Runtime -->|Prepared Agent 运行| Terminal
+    Terminal -->|连接 / 脱离 / I/O| Host
     Host -->|PowerShell 启动或恢复| OC
 ```
 
-Renderer 不能提交 cwd 或任意启动命令；Main 根据 Project/Session 解析目录和固定命令。UI 卸载只执行 disconnect，只有用户显式结束才关闭 PTY。
+Renderer 不能提交 cwd、启动参数或环境变量；Adapter 生成结构化参数，经 Main 校验和 PowerShell 编码后交给终端。UI 卸载只执行 disconnect，只有用户显式结束才关闭 PTY。
 
 ## 主要风险
 
-| ID  | 风险与影响                                      | 处理方向                                   |
-| --- | ----------------------------------------------- | ------------------------------------------ |
-| R1  | Terminal Host 崩溃仍会丢失活 PTY                | UI 明确断连；已保存原生 ID 时可冷恢复      |
-| R2  | OpenCode 数据库结构升级可能影响 Session ID 识别 | 访问集中在只读定位器，增加版本兼容测试     |
-| R3  | 没有 Hook，界面不能准确展示 Agent 状态          | M4 接入事件并保留终端可用降级路径          |
-| R4  | 2 MB 原始终端快照不是完整持久化                 | 快照仅用于热接回；历史事实由 OpenCode 管理 |
-| R5  | 安装包尚未完成签名、升级和卸载矩阵              | M6 在干净 Windows 环境验收                 |
+| ID  | 风险与影响                                      | 处理方向                                     |
+| --- | ----------------------------------------------- | -------------------------------------------- |
+| R1  | Terminal Host 崩溃仍会丢失活 PTY                | UI 明确断连；已保存原生 ID 时可冷恢复        |
+| R2  | OpenCode 数据库结构升级可能影响 Session ID 识别 | 访问集中在只读定位器，增加版本兼容测试       |
+| R3  | 没有事件接入，界面不能准确展示 Agent 状态       | M4.2 建立可重放事件通道                      |
+| R4  | 2 MB 原始终端快照不是完整持久化                 | 快照仅用于热接回；历史事实由 OpenCode 管理   |
+| R5  | 安装包尚未完成签名、升级和卸载矩阵              | M7 在干净 Windows 环境验收                   |
+| R6  | 多 Agent 边界目前只由测试 Adapter 验证          | M4.4 接入 Claude Code 作为第二个真实 Adapter |
 
-下一步按[实施计划](./PLAN.md)进入 M4；代码入口见[代码地图](./CODE_MAP.md)。
+下一步按[实施计划](./PLAN.md)进入 M4.2；代码入口见[代码地图](./CODE_MAP.md)。

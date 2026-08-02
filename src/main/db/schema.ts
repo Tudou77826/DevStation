@@ -7,7 +7,7 @@
 import type { Database } from './database'
 
 /** Current schema version. Bump when adding migrations. */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 const CREATE_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -42,11 +42,14 @@ CREATE TABLE IF NOT EXISTS sessions (
   task_id        TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   project_id     TEXT REFERENCES projects(id) ON DELETE RESTRICT,
   title          TEXT NOT NULL DEFAULT '',
-  status         TEXT NOT NULL DEFAULT 'idle'
-                 CHECK(status IN ('idle','running','waiting','done','failed')),
-  agent_type     TEXT NOT NULL DEFAULT 'opencode'
-                 CHECK(agent_type IN ('opencode')),
-  agent_session_id TEXT,
+  status         TEXT NOT NULL DEFAULT 'unknown'
+                 CHECK(status IN ('unknown','starting','working','waiting','done','failed')),
+  agent_id       TEXT NOT NULL DEFAULT 'opencode',
+  agent_session_ref TEXT,
+  agent_run_id   TEXT,
+  agent_status_source TEXT NOT NULL DEFAULT 'none'
+                 CHECK(agent_status_source IN ('none','provider-event')),
+  agent_status_updated_at INTEGER,
   last_opened_at INTEGER,
   created_at     INTEGER NOT NULL,
   updated_at     INTEGER NOT NULL
@@ -77,6 +80,50 @@ ALTER TABLE sessions ADD COLUMN agent_type TEXT NOT NULL DEFAULT 'opencode'
 ALTER TABLE sessions ADD COLUMN agent_session_id TEXT;
 `
 
+const OPEN_AGENT_SCHEMA_SQL = `
+DROP INDEX IF EXISTS idx_sessions_task;
+DROP INDEX IF EXISTS idx_sessions_project;
+ALTER TABLE sessions RENAME TO sessions_v3;
+
+CREATE TABLE sessions (
+  id             TEXT PRIMARY KEY,
+  task_id        TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  project_id     TEXT REFERENCES projects(id) ON DELETE RESTRICT,
+  title          TEXT NOT NULL DEFAULT '',
+  status         TEXT NOT NULL DEFAULT 'unknown'
+                 CHECK(status IN ('unknown','starting','working','waiting','done','failed')),
+  agent_id       TEXT NOT NULL DEFAULT 'opencode',
+  agent_session_ref TEXT,
+  agent_run_id   TEXT,
+  agent_status_source TEXT NOT NULL DEFAULT 'none'
+                 CHECK(agent_status_source IN ('none','provider-event')),
+  agent_status_updated_at INTEGER,
+  last_opened_at INTEGER,
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL
+);
+
+INSERT INTO sessions (
+  id, task_id, project_id, title, status, agent_id, agent_session_ref,
+  agent_run_id, agent_status_source, agent_status_updated_at,
+  last_opened_at, created_at, updated_at
+)
+SELECT
+  id, task_id, project_id, title, 'unknown',
+  agent_type,
+  CASE
+    WHEN agent_session_id IS NULL THEN NULL
+    ELSE json_object('kind', 'session-id', 'value', agent_session_id)
+  END,
+  NULL, 'none', NULL,
+  last_opened_at, created_at, updated_at
+FROM sessions_v3;
+
+DROP TABLE sessions_v3;
+CREATE INDEX idx_sessions_task    ON sessions(task_id);
+CREATE INDEX idx_sessions_project ON sessions(project_id);
+`
+
 /** Create the initial tables/indexes. Called only from the migration transaction. */
 export function createTables(db: Database): void {
   db.exec(CREATE_SQL)
@@ -104,6 +151,7 @@ export function migrate(db: Database): void {
     // did not yet have the pinned CHECK constraint.
     if (storedVersion < 2) db.exec(PINNED_GUARD_SQL)
     if (storedVersion < 3 && storedVersion >= 1) db.exec(SESSION_AGENT_SQL)
+    if (storedVersion < 4 && storedVersion >= 1) db.exec(OPEN_AGENT_SCHEMA_SQL)
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   })
 }

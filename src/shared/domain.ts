@@ -2,6 +2,8 @@
 // Field shapes mirror the SQLite schema in src/main/db/schema.ts.
 // Times are epoch milliseconds (Date.now()), timezone-agnostic.
 
+import type { AgentSessionRef } from './agent'
+
 export type TaskStatus = 'todo' | 'in-progress' | 'done'
 
 export interface Task {
@@ -32,8 +34,9 @@ export interface Project {
   updatedAt: number
 }
 
-export type SessionStatus = 'idle' | 'running' | 'waiting' | 'done' | 'failed'
-export type CodingAgentType = 'opencode'
+export type SessionStatus =
+  'unknown' | 'starting' | 'working' | 'waiting' | 'done' | 'failed'
+export type AgentStatusSource = 'none' | 'provider-event'
 
 export interface Session {
   id: string
@@ -47,10 +50,15 @@ export interface Session {
   projectId: string | null
   title: string
   status: SessionStatus
-  /** Coding Agent used by this workspace session. MVP initially supports OpenCode. */
-  agentType: CodingAgentType
-  /** Provider-owned session id used by the Agent's native resume command. */
-  agentSessionId: string | null
+  /** Stable adapter registry key. Unknown historical values remain readable. */
+  agentId: string
+  /** Provider-owned reference used by the Agent's native resume command. */
+  agentSessionRef: AgentSessionRef | null
+  /** Current Agent process generation; changes only when a new PTY is created. */
+  agentRunId: string | null
+  /** Source of the Agent status; PTY lifecycle is deliberately not a status source. */
+  statusSource: AgentStatusSource
+  statusUpdatedAt: number | null
   lastOpenedAt: number | null
   createdAt: number
   updatedAt: number

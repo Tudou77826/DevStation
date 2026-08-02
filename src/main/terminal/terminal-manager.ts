@@ -10,20 +10,21 @@ import type {
   TerminalHostStateEvent,
   TerminalSession
 } from '../../shared/types'
-import { openCodeStartupCommand, resolvePowerShellLaunch } from './launch-spec'
+import { resolvePowerShellLaunch } from './launch-spec'
 import type {
   HostCreateOrAttachRequest,
   HostDiagnostics,
   HostSessionResult
 } from './terminal-host-protocol'
 import type { TerminalHostClientEvents } from './terminal-host-client'
-import type { OpenCodeSessionLocator } from './opencode-session-locator'
+import type {
+  AgentRuntimeService,
+  PreparedAgentTerminal
+} from '../agents/runtime-service'
 
 const MAX_DIMENSION = 500
 const MAX_INPUT_LENGTH = 1024 * 1024
 const MAX_ID_LENGTH = 200
-const DISCOVERY_DEBOUNCE_MS = 250
-const DISCOVERY_TIMEOUT_MS = 30_000
 
 interface TerminalHostConnection {
   createOrAttach(request: HostCreateOrAttachRequest): Promise<HostSessionResult>
@@ -41,16 +42,7 @@ interface TerminalHostConnection {
 
 interface TerminalRepositories {
   projects: Pick<ProjectRepo, 'get'>
-  sessions: Pick<SessionRepo, 'get' | 'setAgentSession'>
-}
-
-interface PendingAgentDiscovery {
-  devStationSessionId: string
-  cwd: string
-  createdAt: number
-  excludedIds: Set<string>
-  deadline: number
-  timer: ReturnType<typeof setTimeout> | null
+  sessions: Pick<SessionRepo, 'get'>
 }
 
 interface TerminalOwner {
@@ -61,12 +53,19 @@ interface TerminalOwner {
 export interface TerminalManagerOptions {
   host: TerminalHostConnection
   repositories: TerminalRepositories
-  openCodeSessions: Pick<OpenCodeSessionLocator, 'snapshot' | 'findCreatedSession'>
+  agentRuntime: Pick<
+    AgentRuntimeService,
+    | 'prepareSession'
+    | 'onTerminalConnected'
+    | 'onTerminalActivity'
+    | 'onTerminalExit'
+    | 'onHostDisconnected'
+    | 'dispose'
+  >
 }
 
 export class TerminalManager {
   private readonly owners = new Map<string, Map<number, TerminalOwner>>()
-  private readonly discovery = new Map<string, PendingAgentDiscovery>()
 
   constructor(private readonly options: TerminalManagerOptions) {
     options.host.on('data', (payload) => this.onHostData(payload))
@@ -116,7 +115,7 @@ export class TerminalManager {
   }
 
   dispose(): void {
-    for (const terminalId of this.discovery.keys()) this.clearDiscovery(terminalId)
+    this.options.agentRuntime.dispose()
     this.owners.clear()
     this.options.host.dispose()
   }
@@ -135,9 +134,6 @@ export class TerminalManager {
     const cols = validateDimension(parsed.cols, 'cols')
     const rows = validateDimension(parsed.rows, 'rows')
     const shell = resolvePowerShellLaunch(process.platform, process.env)
-    const excludedIds = resolved.devStationSessionId
-      ? this.safeOpenCodeSnapshot(resolved.cwd)
-      : new Set<string>()
     let owners = this.owners.get(resolved.terminalId)
     if (owners === undefined) {
       owners = new Map()
@@ -157,9 +153,9 @@ export class TerminalManager {
         rows,
         cwd: resolved.cwd,
         shell,
-        ...(resolved.startupCommand === undefined
+        ...(resolved.agent === null
           ? {}
-          : { startupCommand: resolved.startupCommand })
+          : { startupCommand: resolved.agent.startupCommand })
       })
       diagnostics = await this.options.host.diagnostics()
     } catch (error) {
@@ -167,16 +163,27 @@ export class TerminalManager {
       throw error
     }
 
-    if (resolved.devStationSessionId !== null && resolved.agentSessionId === null) {
-      this.trackDiscovery(result.id, {
-        devStationSessionId: resolved.devStationSessionId,
-        cwd: resolved.cwd,
-        createdAt: result.createdAt,
-        excludedIds: result.isNew ? excludedIds : new Set(),
-        deadline: Date.now() + DISCOVERY_TIMEOUT_MS,
-        timer: null
-      })
-      this.scheduleDiscovery(result.id)
+    if (resolved.agent !== null) {
+      try {
+        this.options.agentRuntime.onTerminalConnected({
+          terminalId: result.id,
+          cwd: resolved.cwd,
+          createdAt: result.createdAt,
+          isNew: result.isNew,
+          prepared: resolved.agent
+        })
+      } catch (error) {
+        this.detachOwner(resolved.terminalId, event.sender.id)
+        if (result.isNew) {
+          try {
+            await this.options.host.close(result.id)
+          } catch {
+            // Preserve the persistence error; host diagnostics will report a
+            // failed cleanup rather than hiding the root cause from the caller.
+          }
+        }
+        throw error
+      }
     }
 
     return {
@@ -186,11 +193,9 @@ export class TerminalManager {
       shell: result.shell,
       context: parsed.context,
       isNew: result.isNew,
-      agentType: resolved.devStationSessionId === null ? null : 'opencode',
-      agentResumed:
-        result.isNew &&
-        resolved.devStationSessionId !== null &&
-        resolved.agentSessionId !== null,
+      agentId: resolved.agent?.agentId ?? null,
+      agentLabel: resolved.agent?.agentLabel ?? null,
+      agentResumed: result.isNew && resolved.agent?.resumeRequested === true,
       snapshot: result.snapshot,
       host: {
         protocolVersion: diagnostics.protocolVersion,
@@ -203,17 +208,14 @@ export class TerminalManager {
   private resolveContext(context: TerminalContext): {
     terminalId: string
     cwd: string
-    startupCommand?: string
-    devStationSessionId: string | null
-    agentSessionId: string | null
+    agent: PreparedAgentTerminal | null
   } {
     if (context.type === 'workspace') {
       if (context.projectId === null) {
         return {
           terminalId: 'workspace:default',
           cwd: resolveWorkingDirectory(homedir()),
-          devStationSessionId: null,
-          agentSessionId: null
+          agent: null
         }
       }
       const project = this.options.repositories.projects.get(context.projectId)
@@ -221,8 +223,7 @@ export class TerminalManager {
       return {
         terminalId: `project:${project.id}:shell`,
         cwd: resolveWorkingDirectory(project.path),
-        devStationSessionId: null,
-        agentSessionId: null
+        agent: null
       }
     }
 
@@ -231,26 +232,23 @@ export class TerminalManager {
     if (session.projectId === null) throw new Error('Session has no project directory')
     const project = this.options.repositories.projects.get(session.projectId)
     if (project === null) throw new Error('Session project not found')
+    const cwd = resolveWorkingDirectory(project.path)
     return {
       terminalId: `session:${session.id}`,
-      cwd: resolveWorkingDirectory(project.path),
-      startupCommand: openCodeStartupCommand(session.agentSessionId),
-      devStationSessionId: session.id,
-      agentSessionId: session.agentSessionId
+      cwd,
+      agent: this.options.agentRuntime.prepareSession(session.id, cwd)
     }
   }
 
   private onHostData(payload: TerminalDataEvent): void {
     this.sendToOwners(payload.sessionId, 'terminal:data', payload)
-    if (this.discovery.has(payload.sessionId))
-      this.scheduleDiscovery(payload.sessionId, true)
+    this.options.agentRuntime.onTerminalActivity(payload.sessionId)
   }
 
   private onHostExit(payload: TerminalExitEvent): void {
-    this.attemptDiscovery(payload.sessionId)
+    this.options.agentRuntime.onTerminalExit(payload.sessionId)
     this.sendToOwners(payload.sessionId, 'terminal:exit', payload)
     this.owners.delete(payload.sessionId)
-    this.clearDiscovery(payload.sessionId)
   }
 
   private onHostState(payload: TerminalHostStateEvent): void {
@@ -259,10 +257,7 @@ export class TerminalManager {
       this.sendToOwners(terminalId, 'terminal:host-state', payload)
     }
     this.owners.clear()
-    for (const terminalId of this.discovery.keys()) {
-      this.attemptDiscovery(terminalId)
-      this.clearDiscovery(terminalId)
-    }
+    this.options.agentRuntime.onHostDisconnected()
   }
 
   private sendToOwners(
@@ -273,67 +268,6 @@ export class TerminalManager {
     for (const owner of this.owners.get(terminalId)?.values() ?? []) {
       if (!owner.webContents.isDestroyed()) owner.webContents.send(channel, payload)
     }
-  }
-
-  private trackDiscovery(terminalId: string, pending: PendingAgentDiscovery): void {
-    this.clearDiscovery(terminalId)
-    this.discovery.set(terminalId, pending)
-  }
-
-  private scheduleDiscovery(terminalId: string, fromTerminalActivity = false): void {
-    const pending = this.discovery.get(terminalId)
-    if (pending === undefined || pending.timer !== null) return
-    if (Date.now() >= pending.deadline) {
-      if (!fromTerminalActivity) return
-      // OpenCode creates a native session lazily, commonly after the user's
-      // first prompt. Keep the binding candidate for the PTY lifetime and open
-      // a short discovery window whenever that terminal becomes active again.
-      pending.deadline = Date.now() + 1_000
-    }
-    pending.timer = setTimeout(() => {
-      pending.timer = null
-      this.attemptDiscovery(terminalId)
-    }, DISCOVERY_DEBOUNCE_MS)
-  }
-
-  private attemptDiscovery(terminalId: string): void {
-    const pending = this.discovery.get(terminalId)
-    if (pending === undefined) return
-    try {
-      const agentSessionId = this.options.openCodeSessions.findCreatedSession(
-        pending.cwd,
-        pending.createdAt,
-        pending.excludedIds
-      )
-      if (agentSessionId === null) {
-        this.scheduleDiscovery(terminalId)
-        return
-      }
-      this.options.repositories.sessions.setAgentSession(
-        pending.devStationSessionId,
-        agentSessionId
-      )
-      this.clearDiscovery(terminalId)
-    } catch {
-      // OpenCode may not have created its DB/session row yet. The bounded poll
-      // and later PTY activity retry without affecting terminal availability.
-      this.scheduleDiscovery(terminalId)
-    }
-  }
-
-  private safeOpenCodeSnapshot(cwd: string): Set<string> {
-    try {
-      return this.options.openCodeSessions.snapshot(cwd)
-    } catch {
-      return new Set()
-    }
-  }
-
-  private clearDiscovery(terminalId: string): void {
-    const pending = this.discovery.get(terminalId)
-    if (pending?.timer !== null && pending?.timer !== undefined)
-      clearTimeout(pending.timer)
-    this.discovery.delete(terminalId)
   }
 
   private detachOwner(terminalId: string, ownerId: number): void {

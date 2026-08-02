@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Project, Session } from '@shared/domain'
+import type { PreparedAgentTerminal } from '../agents/runtime-service'
 import type {
   HostCreateOrAttachRequest,
   HostSessionResult
@@ -56,12 +57,38 @@ function session(agentSessionId: string | null = null): Session {
     taskId: 'task-1',
     projectId: 'project-1',
     title: 'Agent work',
-    status: 'idle',
-    agentType: 'opencode',
-    agentSessionId,
+    status: 'unknown',
+    agentId: 'opencode',
+    agentSessionRef:
+      agentSessionId === null ? null : { kind: 'session-id', value: agentSessionId },
+    agentRunId: null,
+    statusSource: 'none',
+    statusUpdatedAt: null,
     lastOpenedAt: null,
     createdAt: 1,
     updatedAt: 1
+  }
+}
+
+function prepared(agentSessionId: string | null = null): PreparedAgentTerminal {
+  const resumed = agentSessionId !== null
+  return {
+    devStationSessionId: 'session-1',
+    agentId: 'opencode',
+    agentLabel: 'OpenCode',
+    agentRunId: 'run-1',
+    sessionRef:
+      agentSessionId === null ? null : { kind: 'session-id', value: agentSessionId },
+    launchSpec: {
+      executable: 'opencode',
+      args: resumed ? ['--session', agentSessionId] : [],
+      env: {}
+    },
+    startupCommand: resumed
+      ? `& 'opencode' '--session' '${agentSessionId}'`
+      : "& 'opencode'",
+    resumeRequested: resumed,
+    discoverySnapshot: new Set(['ses_before'])
   }
 }
 
@@ -124,21 +151,27 @@ function createHarness(options?: {
         options !== undefined && 'sessionValue' in options
           ? (options.sessionValue ?? null)
           : session()
-      ),
-      setAgentSession: vi.fn(() => session('ses_discovered'))
+      )
     }
   }
-  const openCodeSessions = {
-    snapshot: vi.fn(() => new Set(['ses_before'])),
-    findCreatedSession: vi.fn((): string | null => null)
+  const agentRuntime = {
+    prepareSession: vi.fn(() => {
+      const value = repositories.sessions.get()
+      return prepared(value?.agentSessionRef?.value ?? null)
+    }),
+    onTerminalConnected: vi.fn(),
+    onTerminalActivity: vi.fn(),
+    onTerminalExit: vi.fn(),
+    onHostDisconnected: vi.fn(),
+    dispose: vi.fn()
   }
-  const manager = new TerminalManager({ host, repositories, openCodeSessions })
+  const manager = new TerminalManager({ host, repositories, agentRuntime })
   manager.registerIpc()
   return {
     manager,
     host,
     repositories,
-    openCodeSessions,
+    agentRuntime,
     emitData: (payload: HostData) => dataListener?.(payload),
     emitExit: (payload: HostExit) => exitListener?.(payload),
     emitState: (payload: HostState) => stateListener?.(payload)
@@ -208,10 +241,8 @@ describe('TerminalManager', () => {
     )
   })
 
-  it('starts OpenCode for a new DevStation session and records its native id', async () => {
-    vi.useFakeTimers()
+  it('starts the prepared Agent and delegates its terminal lifecycle', async () => {
     const harness = createHarness()
-    harness.openCodeSessions.findCreatedSession.mockReturnValue('ses_created')
     const owner = sender(1)
     const connected = (await invoke('terminal:connect', owner, {
       context: { type: 'session', sessionId: 'session-1' },
@@ -222,22 +253,23 @@ describe('TerminalManager', () => {
     expect(harness.host.createOrAttach).toHaveBeenCalledWith(
       expect.objectContaining({
         sessionId: 'session:session-1',
-        startupCommand: 'opencode'
+        startupCommand: "& 'opencode'"
       })
     )
-    expect(connected).toMatchObject({ agentType: 'opencode', agentResumed: false })
+    expect(connected).toMatchObject({
+      agentId: 'opencode',
+      agentLabel: 'OpenCode',
+      agentResumed: false
+    })
+    expect(harness.agentRuntime.onTerminalConnected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        terminalId: connected.id,
+        cwd: process.cwd(),
+        isNew: true
+      })
+    )
     harness.emitData({ sessionId: connected.id, data: 'OpenCode' })
-    await vi.advanceTimersByTimeAsync(250)
-    expect(harness.openCodeSessions.findCreatedSession).toHaveBeenCalledWith(
-      process.cwd(),
-      10_000,
-      new Set(['ses_before'])
-    )
-    expect(harness.repositories.sessions.setAgentSession).toHaveBeenCalledWith(
-      'session-1',
-      'ses_created'
-    )
-    vi.useRealTimers()
+    expect(harness.agentRuntime.onTerminalActivity).toHaveBeenCalledWith(connected.id)
   })
 
   it('uses OpenCode native resume only when a dead PTY must be recreated', async () => {
@@ -249,7 +281,9 @@ describe('TerminalManager', () => {
     })
 
     expect(harness.host.createOrAttach).toHaveBeenCalledWith(
-      expect.objectContaining({ startupCommand: 'opencode --session ses_native-1' })
+      expect.objectContaining({
+        startupCommand: "& 'opencode' '--session' 'ses_native-1'"
+      })
     )
     expect(connected).toMatchObject({ agentResumed: true })
 
@@ -402,12 +436,8 @@ describe('TerminalManager', () => {
     ).rejects.toThrow('Terminal session not found')
   })
 
-  it('keeps ownership and discovery consistent across host and vendor failures', async () => {
-    vi.useFakeTimers()
+  it('keeps ownership consistent across host and Agent preparation failures', async () => {
     const harness = createHarness()
-    harness.openCodeSessions.snapshot.mockImplementation(() => {
-      throw new Error('OpenCode DB is starting')
-    })
     const owner = sender(1)
     const connected = (await invoke('terminal:connect', owner, {
       context: { type: 'session', sessionId: 'session-1' },
@@ -417,13 +447,10 @@ describe('TerminalManager', () => {
     expect(harness.host.createOrAttach).toHaveBeenCalledWith(
       expect.objectContaining({ sessionId: connected.id })
     )
-    harness.openCodeSessions.findCreatedSession.mockImplementation(() => {
-      throw new Error('row not committed yet')
-    })
-    await vi.advanceTimersByTimeAsync(250)
-    expect(harness.repositories.sessions.setAgentSession).not.toHaveBeenCalled()
     harness.emitExit({ sessionId: connected.id, exitCode: 1, reason: 'exited' })
+    expect(harness.agentRuntime.onTerminalExit).toHaveBeenCalledWith(connected.id)
     harness.manager.dispose()
+    expect(harness.agentRuntime.dispose).toHaveBeenCalledOnce()
 
     const failed = createHarness()
     failed.host.createOrAttach.mockRejectedValue(new Error('host unavailable'))
@@ -437,7 +464,35 @@ describe('TerminalManager', () => {
     await expect(
       invoke('terminal:write', owner, 'workspace:default', 'no owner')
     ).rejects.toThrow('Terminal session not found')
-    vi.useRealTimers()
+
+    const agentFailed = createHarness()
+    agentFailed.agentRuntime.prepareSession.mockImplementation(() => {
+      throw new Error('Coding Agent is not installed: missing')
+    })
+    await expect(
+      invoke('terminal:connect', owner, {
+        context: { type: 'session', sessionId: 'session-1' },
+        cols: 80,
+        rows: 24
+      })
+    ).rejects.toThrow('Coding Agent is not installed')
+
+    const persistenceFailed = createHarness()
+    persistenceFailed.agentRuntime.onTerminalConnected.mockImplementation(() => {
+      throw new Error('run generation persistence failed')
+    })
+    persistenceFailed.host.close.mockRejectedValue(new Error('host cleanup failed'))
+    await expect(
+      invoke('terminal:connect', owner, {
+        context: { type: 'session', sessionId: 'session-1' },
+        cols: 80,
+        rows: 24
+      })
+    ).rejects.toThrow('run generation persistence failed')
+    expect(persistenceFailed.host.close).toHaveBeenCalledWith('session:session-1')
+    await expect(
+      invoke('terminal:write', owner, 'session:session-1', 'no owner')
+    ).rejects.toThrow('Terminal session not found')
   })
 
   it('rejects invalid session bindings and unavailable project directories', async () => {
@@ -519,12 +574,10 @@ describe('TerminalManager', () => {
   })
 
   it('preserves other attachments while one owner detaches or fails to attach', async () => {
-    vi.useFakeTimers()
     const harness = createHarness({
       sessionValue: session(),
       hostResult: result('session:session-1', false)
     })
-    harness.openCodeSessions.findCreatedSession.mockReturnValue(null)
     const first = sender(1)
     const second = sender(2)
     const destroyed: Array<() => void> = []
@@ -549,14 +602,11 @@ describe('TerminalManager', () => {
       data: 'still live'
     })
     destroyed[0]()
-    await vi.advanceTimersByTimeAsync(250)
-    expect(harness.repositories.sessions.setAgentSession).not.toHaveBeenCalled()
     harness.emitData({ sessionId: 'not-attached', data: 'ignored' })
 
-    // A pending discovery timer is cancelled on app shutdown; the host PTY is not.
+    // Runtime cleanup does not close the detached host PTY.
     harness.manager.dispose()
     expect(harness.host.close).not.toHaveBeenCalled()
-    vi.useRealTimers()
   })
 
   it('reference-counts concurrent attaches from the same renderer', async () => {
@@ -588,26 +638,15 @@ describe('TerminalManager', () => {
     expect(harness.host.close).not.toHaveBeenCalled()
   })
 
-  it('discovers a lazily created OpenCode session after later terminal activity', async () => {
-    vi.useFakeTimers()
+  it('forwards late terminal activity to the Agent runtime without owning discovery', async () => {
     const harness = createHarness()
-    harness.openCodeSessions.findCreatedSession.mockReturnValue(null)
     const connected = (await invoke('terminal:connect', sender(1), {
       context: { type: 'session', sessionId: 'session-1' },
       cols: 80,
       rows: 24
     })) as HostSessionResult
 
-    vi.setSystemTime(Date.now() + 31_000)
-    await vi.advanceTimersByTimeAsync(250)
-    harness.openCodeSessions.findCreatedSession.mockReturnValue('ses_after_prompt')
     harness.emitData({ sessionId: connected.id, data: 'first prompt rendered' })
-    await vi.advanceTimersByTimeAsync(250)
-
-    expect(harness.repositories.sessions.setAgentSession).toHaveBeenCalledWith(
-      'session-1',
-      'ses_after_prompt'
-    )
-    vi.useRealTimers()
+    expect(harness.agentRuntime.onTerminalActivity).toHaveBeenCalledWith(connected.id)
   })
 })

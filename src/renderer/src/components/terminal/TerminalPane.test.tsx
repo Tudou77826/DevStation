@@ -85,7 +85,8 @@ describe('TerminalPane', () => {
         shell: 'powershell.exe',
         context: request.context,
         isNew: false,
-        agentType: request.context.type === 'session' ? 'opencode' : null,
+        agentId: request.context.type === 'session' ? 'opencode' : null,
+        agentLabel: request.context.type === 'session' ? 'OpenCode' : null,
         agentResumed: false,
         snapshot: 'restored prompt> ',
         host: { protocolVersion: 1, processId: 9001, startedAt: 1 }

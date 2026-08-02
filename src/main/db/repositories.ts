@@ -9,6 +9,7 @@ import { randomUUID } from 'node:crypto'
 import type { Database, SqlValue } from './database'
 import { RpcError, notFound } from '../rpc/errors'
 import type { Project, Session, Task, TaskStatus } from '@shared/domain'
+import type { AgentSessionRef } from '@shared/agent'
 
 // ── Row → entity mappers (DB snake_case / 0|1 → domain) ──────────────────────
 
@@ -68,8 +69,11 @@ interface SessionRow {
   project_id: string | null
   title: string
   status: string
-  agent_type: string
-  agent_session_id: string | null
+  agent_id: string
+  agent_session_ref: string | null
+  agent_run_id: string | null
+  agent_status_source: string
+  agent_status_updated_at: number | null
   last_opened_at: number | null
   created_at: number
   updated_at: number
@@ -81,11 +85,43 @@ function mapSession(r: SessionRow): Session {
     projectId: r.project_id,
     title: r.title,
     status: r.status as Session['status'],
-    agentType: r.agent_type as Session['agentType'],
-    agentSessionId: r.agent_session_id,
+    agentId: r.agent_id,
+    agentSessionRef: parseAgentSessionRef(r.agent_session_ref),
+    agentRunId: r.agent_run_id,
+    statusSource: r.agent_status_source as Session['statusSource'],
+    statusUpdatedAt: r.agent_status_updated_at,
     lastOpenedAt: r.last_opened_at,
     createdAt: r.created_at,
     updatedAt: r.updated_at
+  }
+}
+
+function parseAgentSessionRef(value: string | null): AgentSessionRef | null {
+  if (value === null) return null
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (parsed === null || typeof parsed !== 'object') {
+      throw new Error('Invalid stored Agent session reference')
+    }
+    const record = parsed as Record<string, unknown>
+    if (typeof record['kind'] !== 'string' || typeof record['value'] !== 'string') {
+      throw new Error('Invalid stored Agent session reference')
+    }
+    return {
+      kind: record['kind'],
+      value: record['value'],
+      ...(typeof record['transcriptPath'] === 'string'
+        ? { transcriptPath: record['transcriptPath'] }
+        : {})
+    }
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === 'Invalid stored Agent session reference'
+    ) {
+      throw error
+    }
+    throw new Error('Invalid stored Agent session reference', { cause: error })
   }
 }
 
@@ -333,11 +369,14 @@ export class SessionRepo {
    * Create a session bound to a task; snapshot the task's current project.
    * Agent startup remains owned by terminal connection; this only persists metadata.
    */
-  createFromTask(taskId: string): Session {
+  createFromTask(taskId: string, agentId = 'opencode'): Session {
     const task = asRow<TaskRow>(
       this.db.prepare('SELECT * FROM tasks WHERE id = ?').get(taskId)
     )
     if (task === undefined) throw notFound('任务')
+    if (!/^[a-z0-9][a-z0-9._-]{0,63}$/.test(agentId)) {
+      throw new RpcError('VALIDATION', '无效的 Coding Agent 标识')
+    }
 
     const now = Date.now()
     const id = randomUUID()
@@ -345,11 +384,12 @@ export class SessionRepo {
     this.db
       .prepare(
         `INSERT INTO sessions (id, task_id, project_id, title, status,
-                               agent_type, agent_session_id, last_opened_at,
-                               created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'idle', 'opencode', NULL, ?, ?, ?)`
+                               agent_id, agent_session_ref, agent_run_id,
+                               agent_status_source, agent_status_updated_at,
+                               last_opened_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'unknown', ?, NULL, NULL, 'none', NULL, ?, ?, ?)`
       )
-      .run(id, taskId, task.project_id, title, now, now, now)
+      .run(id, taskId, task.project_id, title, agentId, now, now, now)
     return this.get(id)!
   }
 
@@ -363,16 +403,30 @@ export class SessionRepo {
     return this.get(id)!
   }
 
-  setAgentSession(id: string, agentSessionId: string): Session {
+  setAgentSessionRef(id: string, ref: AgentSessionRef): Session {
     const existing = this.get(id)
     if (existing === null) throw notFound('会话')
     this.db
       .prepare(
         `UPDATE sessions
-         SET agent_type = 'opencode', agent_session_id = ?, updated_at = ?
+         SET agent_session_ref = ?, updated_at = ?
          WHERE id = ?`
       )
-      .run(agentSessionId, Date.now(), id)
+      .run(JSON.stringify(ref), Date.now(), id)
+    return this.get(id)!
+  }
+
+  startAgentRun(id: string, agentRunId: string): Session {
+    const existing = this.get(id)
+    if (existing === null) throw notFound('会话')
+    this.db
+      .prepare(
+        `UPDATE sessions
+         SET agent_run_id = ?, status = 'unknown', agent_status_source = 'none',
+             agent_status_updated_at = NULL, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(agentRunId, Date.now(), id)
     return this.get(id)!
   }
 }

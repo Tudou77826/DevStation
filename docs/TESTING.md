@@ -17,7 +17,7 @@
 
 ## 分层职责
 
-- 单元测试：迁移、Repository、输入边界、启动命令、PTY 宿主和 OpenCode Session 定位。
+- 单元测试：迁移、Repository、Agent Registry/Runtime、argv 安全、PTY 宿主和供应商会话定位。
 - 组件测试：数据 Store、导航、任务详情、右栏和 TerminalPane 生命周期。
 - Electron E2E：真实 Main/Preload/Renderer 链路、持久化和窗口行为。
 - PTY smoke：真实 `node-pty` 的启动、输入、输出、resize 和退出。
@@ -32,13 +32,14 @@
 - 页面卸载、导航切换和窗口销毁只 detach，不 close。
 - 只有显式“结束进程”才关闭 PTY。
 - Renderer 不能提供 cwd、shell 或任意启动命令。
-- 新 OpenCode Session 只绑定当前目录、本次启动后出现的顶层会话。
-- 已保存原生 ID 时，冷启动使用 OpenCode 官方 resume 参数。
+- 新 Agent Session 只绑定当前目录、本次启动后出现的供应商顶层会话。
+- 已保存且通过 Adapter 校验的原生引用才能进入冷恢复 argv；无效引用不得降级为新会话。
+- Adapter 只能返回结构化 executable、args 和 env；所有值由 Main 统一编码，不能拼接 Shell。
 - Electron 重启后可接回同一个 PowerShell PID，并重建可见终端内容。
 - 宿主连接先完成协议版本握手；断连后旧的 Renderer 所有权立即失效。
 - 主动结束能把真实退出结果反馈到 UI；没有 PTY 和客户端时宿主自动退出。
 
-`test:terminal:packaged` 使用隔离临时 Profile 验证打包产物，不访问开发者数据。它覆盖同一 PTY/Host PID 的跨应用重启接回和受控回收；NSIS 安装、升级与卸载矩阵仍属于 M6。
+`test:terminal:packaged` 使用隔离临时 Profile 验证打包产物，不访问开发者数据。它覆盖同一 PTY/Host PID 的跨应用重启接回和受控回收；NSIS 安装、升级与卸载矩阵仍属于 M7。
 
 ## 覆盖率策略
 
@@ -56,4 +57,4 @@
 4. 能力稳定后再提高对应模块阈值。
 5. 删除与现状冲突、只验证实现细节或长期无价值的测试。
 
-当前缺口：Main/Preload 安全配置定向测试、OpenCode Hook 契约、NSIS 安装升级卸载矩阵，以及历史数据库升级矩阵。
+当前缺口：Main/Preload 安全配置定向测试、Agent 事件与 Managed Integration 契约、NSIS 安装升级卸载矩阵，以及更早历史数据库升级矩阵。

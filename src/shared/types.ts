@@ -58,7 +58,8 @@ export interface TerminalSession {
   shell: string
   context: TerminalContext
   isNew: boolean
-  agentType: 'opencode' | null
+  agentId: string | null
+  agentLabel: string | null
   /** True when a new PowerShell used the Agent's native resume command. */
   agentResumed: boolean
   /** Current daemon-side terminal contents used to rebuild xterm after attach. */

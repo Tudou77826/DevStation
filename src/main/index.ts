@@ -4,7 +4,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { TerminalManager } from './terminal/terminal-manager'
 import { TerminalHostClient } from './terminal/terminal-host-client'
-import { OpenCodeSessionLocator } from './terminal/opencode-session-locator'
+import { OpenCodeSessionLocator } from './agents/opencode-session-locator'
+import { OpenCodeAdapter } from './agents/opencode-adapter'
+import { AgentRegistry } from './agents/registry'
+import { AgentRuntimeService } from './agents/runtime-service'
 import { Database } from './db/database'
 import { initializeDatabase } from './db/schema'
 import { ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
@@ -208,10 +211,17 @@ void app.whenReady().then(() => {
     userDataPath: app.getPath('userData'),
     hostEntryPath: join(__dirname, 'terminal-host.js')
   })
+  const agentRegistry = new AgentRegistry([
+    new OpenCodeAdapter(new OpenCodeSessionLocator())
+  ])
+  const agentRuntime = new AgentRuntimeService({
+    registry: agentRegistry,
+    sessions: repositories.sessions
+  })
   terminalManager = new TerminalManager({
     host: terminalHost,
     repositories,
-    openCodeSessions: new OpenCodeSessionLocator()
+    agentRuntime
   })
   terminalManager.registerIpc()
   createWindow()
