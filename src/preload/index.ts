@@ -7,6 +7,7 @@ import type {
   TerminalExitEvent,
   TerminalHostStateEvent
 } from '@shared/types'
+import type { Session } from '@shared/domain'
 
 const api: DevStationAPI = {
   version: process.env['npm_package_version'] ?? '0.0.0',
@@ -14,6 +15,14 @@ const api: DevStationAPI = {
   theme: {
     /** push the resolved theme to main so native window chrome follows it */
     update: (theme: 'dark' | 'light') => ipcRenderer.invoke('theme:update', theme)
+  },
+  agent: {
+    onSessionUpdated: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, session: Session): void =>
+        listener(session)
+      ipcRenderer.on('agent:session-updated', handler)
+      return () => ipcRenderer.removeListener('agent:session-updated', handler)
+    }
   },
   terminal: {
     connect: (request) => ipcRenderer.invoke('terminal:connect', request),

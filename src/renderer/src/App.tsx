@@ -37,6 +37,7 @@ export default function App(): React.ReactElement {
   const rightPanelOpen = useNavStore((s) => s.rightPanelOpen)
   const settingsOpen = useUIStore((s) => s.settingsOpen)
   const loadAll = useDataStore((s) => s.loadAll)
+  const applySessionUpdate = useDataStore((s) => s.applySessionUpdate)
   const [dataReady, setDataReady] = useState(false)
 
   // Hydrate SQLite-backed data on startup so lists are ready for any section.
@@ -49,6 +50,11 @@ export default function App(): React.ReactElement {
       active = false
     }
   }, [loadAll])
+
+  useEffect(
+    () => window.devstation.agent.onSessionUpdated(applySessionUpdate),
+    [applySessionUpdate]
+  )
 
   if (settingsOpen) {
     return (

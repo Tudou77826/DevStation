@@ -10,6 +10,7 @@ import {
 import { basename, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { AgentEvent } from '@shared/agent'
+import type { Session } from '@shared/domain'
 import type { SessionRepo } from '../db/repositories'
 import type { AgentRegistry } from './registry'
 import { MAX_AGENT_EVENT_BYTES, parseAgentEventJson } from './agent-event'
@@ -28,6 +29,7 @@ export interface AgentEventInboxOptions {
   pollIntervalMs?: number
   now?: () => number
   logger?: Pick<Console, 'warn' | 'error'>
+  onSessionUpdated?: (session: Session) => void
 }
 
 export interface InboxConsumeResult {
@@ -130,6 +132,16 @@ export class AgentEventInbox {
       this.quarantine(path, 'event references an unknown session')
       result.quarantined += 1
       return
+    }
+    if (
+      applied.session !== null &&
+      (applied.outcome === 'applied-status' || applied.outcome === 'applied-ref')
+    ) {
+      try {
+        this.options.onSessionUpdated?.(applied.session)
+      } catch (error) {
+        this.logger.warn('[DevStation] Agent session update notification failed:', error)
+      }
     }
     try {
       unlinkSync(path)

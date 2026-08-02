@@ -8,7 +8,8 @@ describe('OpenCodeAdapter', () => {
       findCreatedSession: vi.fn(() => null)
     })
     const context = { cwd: 'C:\\repo', devStationSessionId: 's1', agentRunId: 'r1' }
-    expect(OPEN_CODE_DESCRIPTOR.settings.version).toBe(1)
+    expect(OPEN_CODE_DESCRIPTOR.settings.version).toBe(2)
+    expect(OPEN_CODE_DESCRIPTOR.capabilities.activityEvents).toBe(true)
     expect(adapter.buildLaunch(context)).toEqual({
       executable: 'opencode',
       args: [],
@@ -19,7 +20,7 @@ describe('OpenCodeAdapter', () => {
     ).toEqual({
       executable: 'opencode',
       args: ['--session', 'ses_native-1'],
-      env: {}
+      env: { DEVSTATION_OPENCODE_SESSION_ID: 'ses_native-1' }
     })
   })
 

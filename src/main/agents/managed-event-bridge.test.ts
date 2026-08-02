@@ -92,7 +92,11 @@ describe('ManagedEventBridge', () => {
           '-File',
           managed.scriptPath,
           '-Kind',
-          'working'
+          'working',
+          '-EventId',
+          'event-from-hook',
+          '-OccurredAt',
+          '1234'
         ],
         { env: { ...process.env, ...spec.env }, stdio: 'pipe' }
       )
@@ -107,7 +111,9 @@ describe('ManagedEventBridge', () => {
         agentId: 'opencode',
         devStationSessionId: 'session-1',
         agentRunId: 'run-1',
-        kind: 'working'
+        kind: 'working',
+        eventId: 'event-from-hook',
+        occurredAt: 1234
       })
     }
   )
