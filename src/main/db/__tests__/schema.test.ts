@@ -22,7 +22,7 @@ describe('schema + migrations', () => {
     })
   })
 
-  it('migrates legacy sessions to the OpenCode binding schema', () => {
+  it('migrates legacy sessions to the open Coding Agent binding schema', () => {
     const db = new Database(':memory:')
     createLegacyV1Schema(db)
     migrate(db)
@@ -31,7 +31,13 @@ describe('schema + migrations', () => {
       name: string
     }[]
     expect(columns.map((column) => column.name)).toEqual(
-      expect.arrayContaining(['agent_type', 'agent_session_id'])
+      expect.arrayContaining([
+        'agent_id',
+        'agent_session_ref',
+        'agent_run_id',
+        'agent_status_source',
+        'agent_status_updated_at'
+      ])
     )
     expect(() =>
       db
@@ -42,6 +48,40 @@ describe('schema + migrations', () => {
         )
         .run()
     ).toThrow()
+    db.close()
+  })
+
+  it('preserves a v3 OpenCode binding as a structured reference', () => {
+    const db = new Database(':memory:')
+    createLegacyV1Schema(db)
+    db.exec(`
+      ALTER TABLE sessions ADD COLUMN agent_type TEXT NOT NULL DEFAULT 'opencode'
+        CHECK(agent_type IN ('opencode'));
+      ALTER TABLE sessions ADD COLUMN agent_session_id TEXT;
+      INSERT INTO tasks
+        (id, title, description, status, branch, sort_order, pinned, created_at, updated_at)
+      VALUES ('task-1', 'Legacy', '', 'todo', '', 0, 0, 1, 1);
+      INSERT INTO sessions
+        (id, task_id, title, status, agent_type, agent_session_id, created_at, updated_at)
+      VALUES ('session-1', 'task-1', 'Legacy', 'running', 'opencode', 'ses_legacy', 1, 1);
+      PRAGMA user_version = 3;
+    `)
+
+    migrate(db)
+    const row = db
+      .prepare(
+        `SELECT status, agent_id, agent_session_ref, agent_run_id,
+                agent_status_source
+         FROM sessions WHERE id = 'session-1'`
+      )
+      .get() as Record<string, unknown>
+    expect(row).toEqual({
+      status: 'unknown',
+      agent_id: 'opencode',
+      agent_session_ref: '{"kind":"session-id","value":"ses_legacy"}',
+      agent_run_id: null,
+      agent_status_source: 'none'
+    })
     db.close()
   })
 

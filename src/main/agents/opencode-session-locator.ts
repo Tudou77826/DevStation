@@ -69,7 +69,7 @@ export class OpenCodeSessionLocator {
                 '-NoProfile',
                 '-NonInteractive',
                 '-Command',
-                '& opencode db path'
+                "& 'opencode' 'db' 'path'"
               ]
             : ['db', 'path']
         return execFileSync(file, args, {

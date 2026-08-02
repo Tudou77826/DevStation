@@ -66,7 +66,7 @@ export default defineConfig({
           functions: 74,
           branches: 55
         },
-        'src/main/terminal/opencode-session-locator.ts': {
+        'src/main/agents/opencode-session-locator.ts': {
           lines: 85,
           statements: 82,
           functions: 85,

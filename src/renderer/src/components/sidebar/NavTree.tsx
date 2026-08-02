@@ -195,7 +195,7 @@ function AISpaceTree(): React.ReactElement {
                         <span
                           className={cn(
                             'h-1.5 w-1.5 shrink-0 rounded-full',
-                            session.status === 'running'
+                            session.status === 'working' || session.status === 'starting'
                               ? 'bg-status-success'
                               : session.status === 'waiting'
                                 ? 'bg-status-warning'

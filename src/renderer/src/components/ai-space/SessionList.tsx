@@ -147,13 +147,14 @@ export function SessionList({
 
 function StatusBadge({ status }: { status: string }): React.ReactElement {
   const map: Record<string, { label: string; cls: string }> = {
-    idle: { label: '空闲', cls: 'bg-muted-foreground/20 text-muted-foreground' },
-    running: { label: '运行中', cls: 'bg-status-success/15 text-status-success' },
+    unknown: { label: '状态未知', cls: 'bg-muted-foreground/20 text-muted-foreground' },
+    starting: { label: '启动中', cls: 'bg-status-success/15 text-status-success' },
+    working: { label: '工作中', cls: 'bg-status-success/15 text-status-success' },
     waiting: { label: '等待', cls: 'bg-status-warning/15 text-status-warning' },
     done: { label: '已完成', cls: 'bg-muted-foreground/20 text-muted-foreground' },
     failed: { label: '失败', cls: 'bg-status-error/15 text-status-error' }
   }
-  const m = map[status] ?? map.idle
+  const m = map[status] ?? map.unknown
   return (
     <span className={cn('shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium', m.cls)}>
       {m.label}

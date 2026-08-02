@@ -164,18 +164,56 @@ describe('SessionRepo + cascade', () => {
       const s = sessions.createFromTask(t.id)
       expect(s.taskId).toBe(t.id)
       expect(s.projectId).toBe('proj-1') // snapshot
-      expect(s).toMatchObject({ agentType: 'opencode', agentSessionId: null })
+      expect(s).toMatchObject({
+        status: 'unknown',
+        agentId: 'opencode',
+        agentSessionRef: null,
+        agentRunId: null,
+        statusSource: 'none',
+        statusUpdatedAt: null
+      })
     })
   })
 
-  it('stores the native OpenCode session id used for cold resume', () => {
+  it('stores a structured native Agent session reference used for cold resume', () => {
     withDb((db) => {
       const { tasks, sessions } = repos(db)
       const task = tasks.create({ title: 'Resume me' })
       const created = sessions.createFromTask(task.id)
-      const bound = sessions.setAgentSession(created.id, 'ses_native-1')
-      expect(bound.agentSessionId).toBe('ses_native-1')
-      expect(sessions.get(created.id)?.agentSessionId).toBe('ses_native-1')
+      const ref = { kind: 'session-id', value: 'ses_native-1' }
+      const bound = sessions.setAgentSessionRef(created.id, ref)
+      expect(bound.agentSessionRef).toEqual(ref)
+      expect(sessions.get(created.id)?.agentSessionRef).toEqual(ref)
+    })
+  })
+
+  it('rejects a corrupt stored Agent reference instead of treating it as a new session', () => {
+    withDb((db) => {
+      const { tasks, sessions } = repos(db)
+      const task = tasks.create({ title: 'Do not fork history' })
+      const created = sessions.createFromTask(task.id)
+      db.prepare('UPDATE sessions SET agent_session_ref = ? WHERE id = ?').run(
+        '{broken',
+        created.id
+      )
+      expect(() => sessions.get(created.id)).toThrow(
+        'Invalid stored Agent session reference'
+      )
+    })
+  })
+
+  it('accepts an open Agent id and records each new run generation', () => {
+    withDb((db) => {
+      const { tasks, sessions } = repos(db)
+      const task = tasks.create({ title: 'Use another adapter' })
+      const created = sessions.createFromTask(task.id, 'claude-code')
+      expect(created.agentId).toBe('claude-code')
+      const running = sessions.startAgentRun(created.id, 'run-1')
+      expect(running).toMatchObject({
+        agentRunId: 'run-1',
+        status: 'unknown',
+        statusSource: 'none'
+      })
     })
   })
 

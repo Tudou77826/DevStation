@@ -170,7 +170,7 @@ export function TerminalPane({
         >
           {isFault ? (
             <AlertTriangle size={14} className="shrink-0 text-amber-400" />
-          ) : session?.agentType === 'opencode' ? (
+          ) : session?.agentId !== null && session?.agentId !== undefined ? (
             <Bot size={14} />
           ) : (
             <SquareTerminal size={14} />
@@ -223,7 +223,7 @@ function terminalStateLabel(
 ): string {
   if (status === 'connecting') return '正在连接 PowerShell…'
   if (session !== null) {
-    return `${session.agentType === 'opencode' ? 'OpenCode · ' : ''}PowerShell · PID ${session.pid}`
+    return `${session.agentLabel === null ? '' : `${session.agentLabel} · `}PowerShell · PID ${session.pid}`
   }
   if (status === 'stopped') return '进程已结束'
   if (status === 'exited') return '进程已正常退出'
