@@ -31,8 +31,8 @@ export class AgentRegistry {
     return [...this.adapters.values()].map((adapter) => adapter.descriptor)
   }
 
-  async probe(id: string): Promise<AgentAvailability> {
-    return this.require(id).probe()
+  async probe(id: string, executablePath?: string): Promise<AgentAvailability> {
+    return this.require(id).probe(executablePath)
   }
 
   catalog(): AgentCatalogEntry[] {

@@ -5,7 +5,7 @@
 // maps to its Zod-typed params and TS result type, so callers get static typing
 // and the dispatcher only accepts registered methods.
 import type { Project, Session, Task, TaskStatus } from './domain'
-import type { AgentCatalogEntry } from './agent'
+import type { AgentCatalogEntry, AgentDiagnosticEntry, AgentUserSettings } from './agent'
 
 export type RpcErrorCode =
   | 'VALIDATION'
@@ -67,11 +67,36 @@ export interface CreateSessionFromTaskParam extends TaskIdParam {
 export interface ProjectIdParam {
   projectId: string
 }
+export interface AgentIdParam {
+  agentId: string
+}
+export interface AgentEnabledParam extends AgentIdParam {
+  enabled: boolean
+}
+export interface AgentIntegrationActionParam extends AgentIdParam {
+  action: 'enable' | 'repair' | 'disable'
+}
 
 // ── The whitelist map: method name → { params, result } ──────────────────────
 
 export interface RpcMethodMap {
   'agents.list': { params: Record<string, never>; result: AgentCatalogEntry[] }
+  'agents.diagnostics': {
+    params: Record<string, never>
+    result: AgentDiagnosticEntry[]
+  }
+  'agents.pickExecutable': {
+    params: AgentIdParam
+    result: AgentUserSettings | null
+  }
+  'agents.clearExecutable': { params: AgentIdParam; result: AgentUserSettings }
+  'agents.setEnabled': { params: AgentEnabledParam; result: AgentUserSettings }
+  'agents.setDefault': { params: AgentIdParam; result: AgentUserSettings }
+  'agents.openLoginTerminal': { params: AgentIdParam; result: { ok: true } }
+  'agents.integrationAction': {
+    params: AgentIntegrationActionParam
+    result: AgentDiagnosticEntry['integration']
+  }
   'tasks.list': { params: TasksListParams; result: Task[] }
   'tasks.create': { params: TasksCreateParams; result: Task }
   'tasks.update': { params: TasksUpdateParams; result: Task }

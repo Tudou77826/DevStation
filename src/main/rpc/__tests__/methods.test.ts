@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RpcError } from '../errors'
 import type { RpcContext, RpcMethod } from '../core'
+import type { AgentUserSettings } from '@shared/agent'
 
 const mocks = vi.hoisted(() => ({
   showOpenDialog: vi.fn(),
+  spawn: vi.fn(() => ({ unref: vi.fn() })),
   resolveGitRepo: vi.fn(),
   app: { isPackaged: true }
 }))
@@ -12,6 +14,7 @@ vi.mock('electron', () => ({
   app: mocks.app,
   dialog: { showOpenDialog: mocks.showOpenDialog }
 }))
+vi.mock('node:child_process', () => ({ spawn: mocks.spawn }))
 vi.mock('../../git/validate', () => ({ resolveGitRepo: mocks.resolveGitRepo }))
 
 import { buildRegistry } from '../methods'
@@ -39,6 +42,20 @@ function repositories() {
       listByTask: vi.fn(),
       listByProject: vi.fn(),
       touch: vi.fn()
+    },
+    agentSettings: {
+      effective: vi.fn((agentId: string): AgentUserSettings => ({
+        agentId,
+        enabled: true,
+        integrationEnabled: true,
+        executablePath: null,
+        isDefault: agentId === 'opencode',
+        updatedAt: null
+      })),
+      setExecutablePath: vi.fn(),
+      setEnabled: vi.fn(),
+      setIntegrationEnabled: vi.fn(),
+      setDefault: vi.fn()
     }
   }
 }
@@ -51,7 +68,13 @@ function context(
     repositories: repos as unknown as RpcContext['repositories'],
     agentRegistry: {
       catalog: vi.fn().mockResolvedValue([]),
-      get: vi.fn().mockReturnValue({})
+      probe: vi.fn().mockResolvedValue({ status: 'available' }),
+      descriptors: vi.fn().mockReturnValue([
+        { id: 'opencode', label: 'OpenCode' },
+        { id: 'chrys', label: 'Chrys' }
+      ]),
+      get: vi.fn().mockReturnValue({}),
+      require: vi.fn()
     } as unknown as RpcContext['agentRegistry'],
     sender
   }
@@ -80,6 +103,13 @@ describe('RPC method registry', () => {
     const registry = buildRegistry()
     const names = [
       'agents.list',
+      'agents.diagnostics',
+      'agents.pickExecutable',
+      'agents.clearExecutable',
+      'agents.setEnabled',
+      'agents.setDefault',
+      'agents.openLoginTerminal',
+      'agents.integrationAction',
       'tasks.list',
       'tasks.create',
       'tasks.update',
@@ -123,6 +153,281 @@ describe('RPC method registry', () => {
 
     await expect(call('agents.list', {}, ctx)).resolves.toEqual(catalog)
     expect(ctx.agentRegistry.catalog).toHaveBeenCalledOnce()
+  })
+
+  it('lists only enabled and available Agents with the persisted default first', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    const catalog = ['opencode', 'chrys', 'offline', 'missing'].map((id) => ({
+      descriptor: { id }
+    }))
+    vi.mocked(ctx.agentRegistry.catalog).mockReturnValue(catalog as never)
+    repos.agentSettings.effective.mockImplementation(
+      (agentId: string): AgentUserSettings => ({
+        agentId,
+        enabled: agentId !== 'missing',
+        integrationEnabled: true,
+        executablePath: agentId === 'chrys' ? 'D:\\chrys.exe' : null,
+        isDefault: agentId === 'chrys',
+        updatedAt: null
+      })
+    )
+    vi.mocked(ctx.agentRegistry.probe).mockImplementation(async (agentId) => ({
+      status: agentId === 'opencode' || agentId === 'chrys' ? 'available' : 'unavailable',
+      executable: agentId,
+      version: null,
+      message: null
+    }))
+
+    await expect(call('agents.list', {}, ctx)).resolves.toEqual([
+      { descriptor: { id: 'chrys' } },
+      { descriptor: { id: 'opencode' } }
+    ])
+    expect(ctx.agentRegistry.probe).toHaveBeenCalledWith('chrys', 'D:\\chrys.exe')
+    expect(ctx.agentRegistry.probe).not.toHaveBeenCalledWith('missing', undefined)
+  })
+
+  it('opens only an adapter-declared login command in a detached native terminal', async () => {
+    const ctx = context()
+    const adapter = {
+      buildLogin: vi.fn(() => ({
+        executable: 'D:\\tools\\opencode.exe',
+        args: ['auth', 'login'],
+        env: {}
+      })),
+      probe: vi.fn().mockResolvedValue({ status: 'available' })
+    }
+    vi.mocked(ctx.agentRegistry.get).mockReturnValue(adapter as never)
+
+    await expect(
+      call('agents.openLoginTerminal', { agentId: 'opencode' }, ctx)
+    ).resolves.toEqual({ ok: true })
+    expect(mocks.spawn).toHaveBeenCalledWith(
+      'powershell.exe',
+      ['-NoLogo', '-NoExit', '-Command', "& 'D:\\tools\\opencode.exe' 'auth' 'login'"],
+      { detached: true, stdio: 'ignore', windowsHide: false }
+    )
+  })
+
+  it('refuses login terminals for unknown, unsupported or unavailable adapters', async () => {
+    const ctx = context()
+    vi.mocked(ctx.agentRegistry.get).mockReturnValueOnce(null)
+    await expect(
+      call('agents.openLoginTerminal', { agentId: 'missing' }, ctx)
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    vi.mocked(ctx.agentRegistry.get).mockReturnValueOnce({} as never)
+    await expect(
+      call('agents.openLoginTerminal', { agentId: 'plain' }, ctx)
+    ).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    vi.mocked(ctx.agentRegistry.get).mockReturnValueOnce({
+      buildLogin: vi.fn(() => ({ executable: 'tool', args: [], env: {} })),
+      probe: vi.fn().mockResolvedValue({ status: 'unavailable' })
+    } as never)
+    await expect(
+      call('agents.openLoginTerminal', { agentId: 'offline' }, ctx)
+    ).rejects.toMatchObject({ code: 'CONFLICT' })
+    expect(mocks.spawn).not.toHaveBeenCalled()
+  })
+
+  it('returns one diagnostic view from adapter truth and persisted user settings', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    const integration = {
+      diagnose: vi.fn(() => ({ state: 'current', path: 'hooks.json', message: 'ready' }))
+    }
+    const adapter = {
+      descriptor: {
+        id: 'chrys',
+        label: 'Chrys',
+        description: 'Internal Agent',
+        capabilities: {},
+        settings: { version: 1, fields: [], actions: [] },
+        setupSteps: []
+      },
+      managedIntegration: integration,
+      probe: vi.fn().mockResolvedValue({
+        status: 'available',
+        executable: 'D:\\tools\\chrys.exe',
+        version: '1.2.3',
+        message: null
+      })
+    }
+    vi.mocked(ctx.agentRegistry.descriptors).mockReturnValue([
+      adapter.descriptor
+    ] as never)
+    vi.mocked(ctx.agentRegistry.require).mockReturnValue(adapter as never)
+    repos.agentSettings.effective.mockReturnValue({
+      agentId: 'chrys',
+      enabled: true,
+      integrationEnabled: true,
+      executablePath: 'D:\\tools\\chrys.exe',
+      isDefault: false,
+      updatedAt: 1
+    })
+
+    await expect(call('agents.diagnostics', {}, ctx)).resolves.toMatchObject([
+      {
+        descriptor: { id: 'chrys' },
+        availability: { status: 'available', version: '1.2.3' },
+        integration: { state: 'current', message: 'ready' }
+      }
+    ])
+    expect(adapter.probe).toHaveBeenCalledWith('D:\\tools\\chrys.exe')
+  })
+
+  it('diagnoses an adapter without managed event integration as a supported null state', async () => {
+    const ctx = context()
+    const descriptor = { id: 'plain', label: 'Plain' }
+    const adapter = {
+      descriptor,
+      probe: vi.fn().mockResolvedValue({
+        status: 'unavailable',
+        executable: 'plain',
+        version: null,
+        message: 'missing'
+      })
+    }
+    vi.mocked(ctx.agentRegistry.descriptors).mockReturnValue([descriptor] as never)
+    vi.mocked(ctx.agentRegistry.require).mockReturnValue(adapter as never)
+
+    await expect(call('agents.diagnostics', {}, ctx)).resolves.toMatchObject([
+      { integration: null, availability: { status: 'unavailable' } }
+    ])
+    expect(adapter.probe).toHaveBeenCalledWith(undefined)
+  })
+
+  it('accepts an executable only through the native picker and persists its absolute file path', async () => {
+    const repos = repositories()
+    const sender = {} as RpcContext['sender']
+    const ctx = context(repos, sender)
+    const executablePath = __filename
+    vi.mocked(ctx.agentRegistry.get).mockReturnValue({
+      descriptor: { id: 'chrys', label: 'Chrys' }
+    } as never)
+    repos.agentSettings.setExecutablePath.mockReturnValue({ agentId: 'chrys' })
+    mocks.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: [executablePath]
+    })
+
+    await expect(
+      call('agents.pickExecutable', { agentId: 'chrys' }, ctx)
+    ).resolves.toEqual({
+      agentId: 'chrys'
+    })
+    expect(repos.agentSettings.setExecutablePath).toHaveBeenCalledWith(
+      'chrys',
+      executablePath
+    )
+    expect(mocks.showOpenDialog).toHaveBeenCalledWith(
+      sender,
+      expect.objectContaining({ properties: ['openFile'] })
+    )
+  })
+
+  it('rejects unknown or invalid executable selections without mutating settings', async () => {
+    const repos = repositories()
+    const sender = {} as RpcContext['sender']
+    const ctx = context(repos, sender)
+    vi.mocked(ctx.agentRegistry.get).mockReturnValueOnce(null)
+    await expect(
+      call('agents.pickExecutable', { agentId: 'missing' }, ctx)
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+
+    vi.mocked(ctx.agentRegistry.get).mockReturnValue({
+      descriptor: { id: 'chrys', label: 'Chrys' }
+    } as never)
+    await expect(
+      call('agents.pickExecutable', { agentId: 'chrys' }, context(repos))
+    ).resolves.toBeNull()
+    mocks.showOpenDialog.mockResolvedValueOnce({ canceled: false, filePaths: [] })
+    await expect(
+      call('agents.pickExecutable', { agentId: 'chrys' }, ctx)
+    ).resolves.toBeNull()
+    mocks.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ['D:\\definitely-missing\\chrys.exe']
+    })
+    await expect(
+      call('agents.pickExecutable', { agentId: 'chrys' }, ctx)
+    ).rejects.toMatchObject({ code: 'INVALID_PATH' })
+    expect(repos.agentSettings.setExecutablePath).not.toHaveBeenCalled()
+  })
+
+  it('persists generic Agent enablement, default and executable reset actions', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    repos.agentSettings.setExecutablePath.mockReturnValue({ action: 'path' })
+    repos.agentSettings.setEnabled.mockReturnValue({ action: 'enabled' })
+    repos.agentSettings.setDefault.mockReturnValue({ action: 'default' })
+
+    await expect(
+      call('agents.clearExecutable', { agentId: 'chrys' }, ctx)
+    ).resolves.toEqual({ action: 'path' })
+    await expect(
+      call('agents.setEnabled', { agentId: 'chrys', enabled: false }, ctx)
+    ).resolves.toEqual({ action: 'enabled' })
+    await expect(call('agents.setDefault', { agentId: 'chrys' }, ctx)).resolves.toEqual({
+      action: 'default'
+    })
+    expect(repos.agentSettings.setExecutablePath).toHaveBeenCalledWith('chrys', null)
+    expect(repos.agentSettings.setEnabled).toHaveBeenCalledWith('chrys', false)
+    expect(repos.agentSettings.setDefault).toHaveBeenCalledWith('chrys')
+
+    vi.mocked(ctx.agentRegistry.get).mockReturnValue(null)
+    await expect(
+      call('agents.clearExecutable', { agentId: 'missing' }, ctx)
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(
+      call('agents.setEnabled', { agentId: 'missing', enabled: true }, ctx)
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(
+      call('agents.setDefault', { agentId: 'missing' }, ctx)
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('keeps integration enablement independent and records disable even after uninstall', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    const uninstall = vi.fn(() => ({
+      state: 'missing',
+      path: 'hooks',
+      message: 'removed'
+    }))
+    vi.mocked(ctx.agentRegistry.get).mockReturnValue({
+      managedIntegration: { uninstall, ensureInstalled: vi.fn(), diagnose: vi.fn() }
+    } as never)
+
+    await expect(
+      call('agents.integrationAction', { agentId: 'chrys', action: 'disable' }, ctx)
+    ).resolves.toEqual({ state: 'missing', message: 'removed' })
+    expect(uninstall).toHaveBeenCalledOnce()
+    expect(repos.agentSettings.setIntegrationEnabled).toHaveBeenCalledWith('chrys', false)
+  })
+
+  it('repairs only an adapter-declared managed integration', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    const ensureInstalled = vi.fn(() => ({
+      state: 'current',
+      path: 'hooks',
+      message: 'installed'
+    }))
+    vi.mocked(ctx.agentRegistry.get).mockReturnValue({
+      managedIntegration: { uninstall: vi.fn(), ensureInstalled, diagnose: vi.fn() }
+    } as never)
+
+    await expect(
+      call('agents.integrationAction', { agentId: 'chrys', action: 'repair' }, ctx)
+    ).resolves.toEqual({ state: 'current', message: 'installed' })
+    expect(repos.agentSettings.setIntegrationEnabled).toHaveBeenCalledWith('chrys', true)
+
+    vi.mocked(ctx.agentRegistry.get).mockReturnValue({} as never)
+    await expect(
+      call('agents.integrationAction', { agentId: 'plain', action: 'enable' }, ctx)
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 
   it('delegates every task operation with normalized parameters', async () => {
@@ -207,6 +512,15 @@ describe('RPC method registry', () => {
     await expect(
       call('projects.create', { name: 'p', path: 'D:\\code\\real-name' }, ctx)
     ).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    repos.projects.getByPathKey.mockReturnValue(null)
+    mocks.resolveGitRepo.mockResolvedValue({ path: 'D:\\', pathKey: 'd:/' })
+    await call('projects.create', { name: 'drive-root', path: 'D:\\' }, ctx)
+    expect(repos.projects.create).toHaveBeenLastCalledWith({
+      name: 'drive-root',
+      path: 'D:\\',
+      pathKey: 'd:/'
+    })
   })
 
   it('preserves safe Git errors and masks unexpected validator failures', async () => {
@@ -275,5 +589,42 @@ describe('RPC method registry', () => {
       call('sessions.createFromTask', { taskId: 't1', agentId: 'missing' }, ctx)
     ).rejects.toMatchObject({ code: 'NOT_FOUND' })
     expect(repos.sessions.createFromTask).not.toHaveBeenCalled()
+  })
+
+  it('uses the persisted default and blocks session creation for a disabled Agent', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    repos.tasks.get.mockReturnValue({ id: 't1' })
+    repos.sessions.createFromTask.mockReturnValue('session')
+    repos.agentSettings.effective.mockImplementation(
+      (agentId: string): AgentUserSettings => ({
+        agentId,
+        enabled: agentId !== 'chrys',
+        integrationEnabled: true,
+        executablePath: null,
+        isDefault: agentId === 'chrys',
+        updatedAt: null
+      })
+    )
+
+    await expect(
+      call('sessions.createFromTask', { taskId: 't1' }, ctx)
+    ).rejects.toMatchObject({ code: 'CONFLICT' })
+    expect(repos.sessions.createFromTask).not.toHaveBeenCalled()
+
+    repos.agentSettings.effective.mockImplementation(
+      (agentId: string): AgentUserSettings => ({
+        agentId,
+        enabled: true,
+        integrationEnabled: true,
+        executablePath: null,
+        isDefault: false,
+        updatedAt: null
+      })
+    )
+    await expect(call('sessions.createFromTask', { taskId: 't1' }, ctx)).resolves.toBe(
+      'session'
+    )
+    expect(repos.sessions.createFromTask).toHaveBeenCalledWith('t1', 'opencode')
   })
 })

@@ -10,6 +10,8 @@ import {
   Inbox,
   LayoutTemplate,
   Plus,
+  Search,
+  AlertTriangle,
   type LucideIcon
 } from 'lucide-react'
 import { SECONDARY_NAV, useNavStore } from '@/store/nav'
@@ -86,6 +88,7 @@ function StaticSecondaryNav(): React.ReactElement {
 
 function AISpaceTree(): React.ReactElement {
   const projects = useDataStore((state) => state.projects)
+  const agents = useDataStore((state) => state.agents ?? [])
   const sessionsByProject = useDataStore((state) => state.sessionsByProject)
   const loadSessionsByProject = useDataStore((state) => state.loadSessionsByProject)
   const touchSession = useDataStore((state) => state.touchSession)
@@ -96,6 +99,9 @@ function AISpaceTree(): React.ReactElement {
   const selectSession = useNavStore((state) => state.selectSession)
   const toggleProjectExpanded = useNavStore((state) => state.toggleProjectExpanded)
   const [loadedIds, setLoadedIds] = useState<string[]>([])
+  const [keyword, setKeyword] = useState('')
+  const [agentFilter, setAgentFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
 
   useEffect(() => {
     const pending = projects
@@ -120,11 +126,88 @@ function AISpaceTree(): React.ReactElement {
     )
   }
 
+  const normalizedKeyword = keyword.trim().toLocaleLowerCase()
+  const visibleProjects = projects.flatMap((project) => {
+    const sessions = sessionsByProject[project.id] ?? []
+    const filteredSessions = sessions.filter((session) => {
+      const matchesKeyword =
+        normalizedKeyword === '' ||
+        project.name.toLocaleLowerCase().includes(normalizedKeyword) ||
+        session.title.toLocaleLowerCase().includes(normalizedKeyword)
+      const matchesAgent = agentFilter === 'all' || session.agentId === agentFilter
+      const matchesStatus = statusFilter === 'all' || session.status === statusFilter
+      return matchesKeyword && matchesAgent && matchesStatus
+    })
+    const projectNameMatches = project.name
+      .toLocaleLowerCase()
+      .includes(normalizedKeyword)
+    const hasSessionFilter = agentFilter !== 'all' || statusFilter !== 'all'
+    if (
+      (normalizedKeyword !== '' &&
+        !projectNameMatches &&
+        filteredSessions.length === 0) ||
+      (hasSessionFilter && filteredSessions.length === 0)
+    ) {
+      return []
+    }
+    return [
+      {
+        project,
+        sessions:
+          normalizedKeyword !== '' || hasSessionFilter ? filteredSessions : sessions
+      }
+    ]
+  })
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-      {projects.map((project) => {
+      <div className="sticky top-0 z-10 space-y-1.5 bg-sidebar pb-2">
+        <label className="flex items-center gap-2 rounded-md border border-sidebar-border bg-background/50 px-2 py-1.5 focus-within:border-ring">
+          <Search size={13} className="text-muted-foreground" />
+          <input
+            aria-label="搜索项目或会话"
+            value={keyword}
+            onChange={(event) => setKeyword(event.target.value)}
+            placeholder="搜索项目或会话"
+            className="min-w-0 flex-1 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/60"
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-1.5">
+          <select
+            aria-label="按 Coding Agent 筛选"
+            value={agentFilter}
+            onChange={(event) => setAgentFilter(event.target.value)}
+            className="min-w-0 rounded-md border border-sidebar-border bg-background/50 px-1.5 py-1 text-[10px] text-muted-foreground outline-none"
+          >
+            <option value="all">全部 Agent</option>
+            {agents.map(({ descriptor }) => (
+              <option key={descriptor.id} value={descriptor.id}>
+                {descriptor.label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label="按会话状态筛选"
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="min-w-0 rounded-md border border-sidebar-border bg-background/50 px-1.5 py-1 text-[10px] text-muted-foreground outline-none"
+          >
+            <option value="all">全部状态</option>
+            <option value="working">工作中</option>
+            <option value="waiting">等待</option>
+            <option value="done">已完成</option>
+            <option value="failed">失败</option>
+            <option value="unknown">未知</option>
+          </select>
+        </div>
+      </div>
+      {visibleProjects.length === 0 && (
+        <div className="px-3 py-8 text-center text-[11px] text-muted-foreground">
+          没有匹配的项目或会话
+        </div>
+      )}
+      {visibleProjects.map(({ project, sessions }) => {
         const expanded = expandedProjectIds.includes(project.id)
-        const sessions = sessionsByProject[project.id] ?? []
         const projectActive =
           selectedProjectId === project.id && selectedSessionId === null
         return (
@@ -164,7 +247,7 @@ function AISpaceTree(): React.ReactElement {
             </div>
 
             {expanded && (
-              <div className="ml-3 border-l border-sidebar-border pl-2">
+              <div className="ml-2 space-y-1 border-l border-sidebar-border py-1 pl-2">
                 {sessions.length === 0 ? (
                   <div className="px-3 py-2 text-[11px] text-muted-foreground/65">
                     暂无工作会话
@@ -182,16 +265,43 @@ function AISpaceTree(): React.ReactElement {
                         }}
                         aria-current={active ? 'page' : undefined}
                         className={cn(
-                          'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left transition-colors',
+                          'flex w-full items-start gap-2 rounded-lg border px-2 py-2 text-left transition-colors',
                           active
-                            ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                            : 'text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground'
+                            ? 'border-sidebar-ring/40 bg-sidebar-accent text-sidebar-accent-foreground'
+                            : 'border-sidebar-border bg-background/45 text-muted-foreground hover:bg-sidebar-accent/55 hover:text-sidebar-accent-foreground'
                         )}
                       >
-                        <Bot size={14} className="shrink-0" />
-                        <span className="min-w-0 flex-1 truncate text-[12px]">
-                          {session.title}
+                        <Bot size={14} className="mt-0.5 shrink-0" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[12px] text-foreground/90">
+                            {session.title}
+                          </span>
+                          <span className="mt-1 flex items-center gap-1 truncate text-[9px] text-muted-foreground">
+                            <span>
+                              {agents.find(
+                                ({ descriptor }) => descriptor.id === session.agentId
+                              )?.descriptor.label ?? session.agentId}
+                            </span>
+                            <span>·</span>
+                            <span>{sessionStatusLabel(session.status)}</span>
+                            <span>·</span>
+                            <span>
+                              {relativeTime(
+                                session.statusUpdatedAt ??
+                                  session.lastOpenedAt ??
+                                  session.createdAt
+                              )}
+                            </span>
+                          </span>
                         </span>
+                        {(session.statusSource === 'none' ||
+                          session.status === 'unknown') && (
+                          <AlertTriangle
+                            size={11}
+                            aria-label="状态已降级"
+                            className="mt-0.5 shrink-0 text-status-warning"
+                          />
+                        )}
                         <span
                           className={cn(
                             'h-1.5 w-1.5 shrink-0 rounded-full',
@@ -215,6 +325,28 @@ function AISpaceTree(): React.ReactElement {
       })}
     </div>
   )
+}
+
+function sessionStatusLabel(status: string): string {
+  return (
+    {
+      unknown: '状态未知',
+      starting: '启动中',
+      working: '工作中',
+      waiting: '等待',
+      done: '已完成',
+      failed: '失败'
+    }[status] ?? '状态未知'
+  )
+}
+
+function relativeTime(timestamp: number): string {
+  const minutes = Math.floor((Date.now() - timestamp) / 60_000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+  return `${Math.floor(hours / 24)} 天前`
 }
 
 function AddProjectButton(): React.ReactElement {

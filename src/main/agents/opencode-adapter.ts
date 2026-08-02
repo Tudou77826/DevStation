@@ -30,6 +30,7 @@ export const OPEN_CODE_DESCRIPTOR: AgentDescriptor = {
     fields: [],
     actions: [
       { id: 'probe', label: '重新检测', kind: 'probe' },
+      { id: 'login', label: '登录 Provider', kind: 'open-login' },
       { id: 'events-enable', label: '启用事件集成', kind: 'integration-enable' },
       { id: 'events-repair', label: '修复事件集成', kind: 'integration-repair' },
       { id: 'events-disable', label: '停用事件集成', kind: 'integration-disable' }
@@ -64,22 +65,27 @@ export class OpenCodeAdapter implements CodingAgentAdapter {
     }
   }
 
-  probe(): Promise<AgentAvailability> {
-    return probeCli({ executable: 'opencode', args: ['--version'], env: {} })
+  probe(executablePath?: string): Promise<AgentAvailability> {
+    return probeCli({
+      executable: executablePath ?? 'opencode',
+      args: ['--version'],
+      env: {}
+    })
   }
 
-  buildLaunch(_context: AgentLaunchContext): AgentLaunchSpec {
-    return { executable: 'opencode', args: [], env: {} }
+  buildLaunch(context: AgentLaunchContext): AgentLaunchSpec {
+    return { executable: context.executablePath ?? 'opencode', args: [], env: {} }
   }
 
-  buildResume(
-    _context: AgentLaunchContext,
-    ref: AgentSessionRef
-  ): AgentLaunchSpec | null {
+  buildLogin(executablePath?: string): AgentLaunchSpec {
+    return { executable: executablePath ?? 'opencode', args: ['auth', 'login'], env: {} }
+  }
+
+  buildResume(context: AgentLaunchContext, ref: AgentSessionRef): AgentLaunchSpec | null {
     const valid = this.validateSessionRef(ref)
     if (valid === null) return null
     return {
-      executable: 'opencode',
+      executable: context.executablePath ?? 'opencode',
       args: ['--session', valid.value],
       env: { DEVSTATION_OPENCODE_SESSION_ID: valid.value }
     }

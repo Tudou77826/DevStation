@@ -81,12 +81,22 @@ export const useDataStore = create<DataState>((set, get) => ({
   async loadAll() {
     set({ loading: true, error: null })
     try {
-      const [tasks, projects, agents] = await Promise.all([
-        unwrap(await rpc.invoke('tasks.list', {})),
-        unwrap(await rpc.invoke('projects.list', {})),
-        unwrap(await rpc.invoke('agents.list', {}))
-      ])
-      set({ tasks, projects, agents, loading: false })
+      const tasksRequest = rpc
+        .invoke('tasks.list', {})
+        .then(unwrap)
+        .then((tasks) => set({ tasks }))
+      const projectsRequest = rpc
+        .invoke('projects.list', {})
+        .then(unwrap)
+        .then((projects) => set({ projects }))
+      const agentsRequest = rpc
+        .invoke('agents.list', {})
+        .then(unwrap)
+        .then((agents) => set({ agents }))
+      // Commit each independently: CLI probes may be slow and must not delay a
+      // task/project snapshot until after a newer user mutation has completed.
+      await Promise.all([tasksRequest, projectsRequest, agentsRequest])
+      set({ loading: false })
     } catch (e) {
       set({ loading: false, error: get().errorMessage(e) })
     }

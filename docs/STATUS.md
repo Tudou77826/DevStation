@@ -1,6 +1,6 @@
 # DevStation 当前状态
 
-DevStation 已完成 M4.4：OpenCode 与 Chrys 均已接入原生 TUI、会话恢复和真实状态事件，创建会话时可选择 Agent。Chrys 实机 smoke 已验证 Session ID 绑定和 `-s` 冷恢复。下一步建设统一设置与诊断 UI；Diff 评审仍未完成。
+DevStation 已完成 M4.5：OpenCode 与 Chrys 共用原生 TUI、会话恢复、真实状态事件和统一设置中心。用户可配置默认 Agent 与 CLI 路径，并诊断、修复或停用受管事件集成。下一步收口 M4.6 适配器测试门禁；Diff 评审仍未完成。
 
 ## 当前能力
 
@@ -9,10 +9,11 @@ DevStation 已完成 M4.4：OpenCode 与 Chrys 均已接入原生 TUI、会话�
 | 桌面工作台   | 可用     | 主区单层；右栏跟随上下文；重启恢复入口、选中项、树展开和面板布局        |
 | 任务与项目   | 可用     | 任务 CRUD、状态、搜索、项目关联与 Git 目录校验                          |
 | 工作会话     | 可用     | 固定 `agentId`，保存结构化原生会话引用、当前运行代次与状态来源          |
-| SQLite       | 可用     | Schema v5；保存 Agent 事件回执，支持幂等重放、原子迁移与降级拒绝        |
+| SQLite       | 可用     | Schema v6；保存 Agent 事件回执与用户 Agent 设置，支持原子迁移与降级拒绝 |
 | PowerShell   | 可用     | AI 主区固定终端；输入、resize、有限快照、显式停止和退出原因反馈         |
 | PTY 热接回   | 可用     | 独立宿主持有 PTY；支持协议握手、诊断、断连反馈、应用重启接回和空闲回收  |
-| Agent 适配层 | 基础可用 | Registry、能力描述、结构化 argv、CLI 探测、运行服务和会话引用校验       |
+| Agent 适配层 | 可用     | Registry、能力描述、结构化 argv、CLI 探测、运行服务和会话引用校验       |
+| Agent 设置   | 可用     | 可用性、启停、默认项、CLI 路径、登录终端与事件集成诊断                  |
 | OpenCode     | 可用     | 启动、恢复、只读会话发现、受管 Plugin 和真实状态事件均封装在 Adapter    |
 | Chrys        | 可用     | 原生 TUI、`-s` 恢复、受管 Hook、会话绑定及工作/等待状态均封装在 Adapter |
 | 工作流       | 展示占位 | 已有 AAW 流程和模板界面，但尚未连接 CLI、真实状态、产物与持久化         |
@@ -40,7 +41,7 @@ flowchart LR
     UI["Renderer：工作台与 xterm"]
     Preload["Preload：白名单 API"]
     Main["Main：权限、上下文与 IPC"]
-    DB["SQLite：任务、项目、会话绑定"]
+    DB["SQLite：任务、项目、会话绑定与 Agent 设置"]
     Runtime["Agent Runtime / Registry"]
     Adapter["OpenCode / Chrys Adapter"]
     Bridge["Managed Event Bridge"]
@@ -64,13 +65,13 @@ Renderer 不能提交 cwd、启动参数或环境变量；Adapter 生成结构�
 
 ## 主要风险
 
-| ID  | 风险与影响                                             | 处理方向                                    |
-| --- | ------------------------------------------------------ | ------------------------------------------- |
-| R1  | Terminal Host 崩溃仍会丢失活 PTY                       | UI 明确断连；已保存原生 ID 时可冷恢复       |
-| R2  | OpenCode 数据库结构升级可能影响 Session ID 识别        | 访问集中在只读定位器，增加版本兼容测试      |
-| R3  | OpenCode Plugin 异常目前只记录诊断，用户无法在 UI 修复 | M4.5 提供启停、修复和降级提示               |
-| R4  | 2 MB 原始终端快照不是完整持久化                        | 快照仅用于热接回；历史事实由原生 Agent 管理 |
-| R5  | 安装包尚未完成签名、升级和卸载矩阵                     | M7 在干净 Windows 环境验收                  |
-| R6  | Hook/Plugin 异常目前无法在 UI 中诊断或修复             | M4.5 提供通用设置、启停、修复和降级提示     |
+| ID  | 风险与影响                                         | 处理方向                                     |
+| --- | -------------------------------------------------- | -------------------------------------------- |
+| R1  | Terminal Host 崩溃仍会丢失活 PTY                   | UI 明确断连；已保存原生 ID 时可冷恢复        |
+| R2  | OpenCode 数据库结构升级可能影响 Session ID 识别    | 访问集中在只读定位器，增加版本兼容测试       |
+| R3  | 原生 Session 被外部删除时，恢复命令可能失败        | 保留终端错误与状态未知标记，不静默创建假状态 |
+| R4  | 2 MB 原始终端快照不是完整持久化                    | 快照仅用于热接回；历史事实由原生 Agent 管理  |
+| R5  | 安装包尚未完成签名、升级和卸载矩阵                 | M7 在干净 Windows 环境验收                   |
+| R6  | 新增 Adapter 的 Descriptor/设置版本可能破坏通用 UI | M4.6 增加版本、动作白名单与迁移契约测试      |
 
-下一步按[实施计划](./PLAN.md)进入 M4.5；代码入口见[代码地图](./CODE_MAP.md)。
+下一步按[实施计划](./PLAN.md)进入 M4.6；代码入口见[代码地图](./CODE_MAP.md)。

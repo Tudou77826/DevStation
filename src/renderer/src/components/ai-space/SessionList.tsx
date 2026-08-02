@@ -41,7 +41,7 @@ export function SessionList({
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [agentId, setAgentId] = useState('opencode')
+  const [agentId, setAgentId] = useState(() => agents[0]?.descriptor.id ?? '')
 
   useEffect(() => {
     if (agents.length === 0) void loadAgents()
@@ -112,7 +112,7 @@ export function SessionList({
             <button
               type="button"
               onClick={() => void handleCreate()}
-              disabled={agents.length === 0}
+              disabled={agents.length === 0 || agentId === ''}
               className="flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Plus size={13} />

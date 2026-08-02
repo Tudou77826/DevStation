@@ -29,6 +29,7 @@ function harness(
     ref?: AgentSessionRef | null
     agentId?: string
     eventBridge?: Pick<ManagedEventBridge, 'enrichLaunchSpec'>
+    settings?: { enabled: boolean; executablePath: string | null }
   } = {}
 ) {
   const sessionValue = session(options.ref ?? null, options.agentId ?? 'test-agent')
@@ -82,6 +83,9 @@ function harness(
     sessions,
     createRunId: () => 'run-1',
     now: () => now,
+    ...(options.settings === undefined
+      ? {}
+      : { agentSettings: { effective: vi.fn(() => options.settings!) } }),
     ...(options.eventBridge === undefined ? {} : { eventBridge: options.eventBridge })
   })
   return { runtime, sessions, adapter, locator, setNow: (value: number) => (now = value) }
@@ -176,6 +180,22 @@ describe('AgentRuntimeService', () => {
       'Stored Agent session reference is invalid'
     )
     expect(invalid.adapter.buildLaunch).not.toHaveBeenCalled()
+  })
+
+  it('uses the configured executable for the real launch and blocks a disabled Agent', () => {
+    const configured = harness({
+      settings: { enabled: true, executablePath: 'D:\\venv\\chrys.exe' }
+    })
+    configured.runtime.prepareSession('session-1', 'C:\\repo')
+    expect(configured.adapter.buildLaunch).toHaveBeenCalledWith(
+      expect.objectContaining({ executablePath: 'D:\\venv\\chrys.exe' })
+    )
+
+    const disabled = harness({ settings: { enabled: false, executablePath: null } })
+    expect(() => disabled.runtime.prepareSession('session-1', 'C:\\repo')).toThrow(
+      'Coding Agent is disabled'
+    )
+    expect(disabled.adapter.buildLaunch).not.toHaveBeenCalled()
   })
 
   it('reopens discovery after the initial window when later terminal activity arrives', async () => {

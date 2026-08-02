@@ -4,7 +4,7 @@
 import { create } from 'zustand'
 import type { NavSection } from '@shared/types'
 
-export type SettingsSection = 'appearance' | 'general' | 'terminal' | 'about'
+export type SettingsSection = 'appearance' | 'general' | 'agents' | 'terminal' | 'about'
 
 interface UIState {
   /** whether the settings full-page view is shown */

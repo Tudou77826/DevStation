@@ -110,6 +110,35 @@ describe('renderer data store', () => {
     })
   })
 
+  it('does not let a slow Agent probe replay an older project snapshot over a user mutation', async () => {
+    let finishAgentProbe!: (value: RpcResponse<AgentCatalogEntry[]>) => void
+    const slowAgentProbe = new Promise<RpcResponse<AgentCatalogEntry[]>>((resolve) => {
+      finishAgentProbe = resolve
+    })
+    const created = project('new')
+    let projectReads = 0
+    invoke.mockImplementation(async (method: string) => {
+      if (method === 'tasks.list') return ok([])
+      if (method === 'agents.list') return slowAgentProbe
+      if (method === 'projects.create') return ok(created)
+      if (method === 'projects.list') {
+        projectReads += 1
+        return ok(projectReads === 1 ? [] : [created])
+      }
+      return ok(null)
+    })
+
+    const initialLoad = useDataStore.getState().loadAll()
+    await vi.waitFor(() => expect(projectReads).toBe(1))
+    await expect(
+      useDataStore.getState().createProject(created.name, created.path)
+    ).resolves.toEqual(created)
+    finishAgentProbe(ok([agent('opencode')]))
+    await initialLoad
+
+    expect(useDataStore.getState().projects).toEqual([created])
+  })
+
   it('loads the Agent catalog and preserves the last usable catalog on failure', async () => {
     invoke.mockResolvedValueOnce(ok([agent('opencode'), agent('chrys')]))
     await expect(useDataStore.getState().loadAgents()).resolves.toEqual([

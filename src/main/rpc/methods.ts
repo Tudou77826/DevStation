@@ -2,10 +2,14 @@
 // Build the registry once and hand it to the dispatcher.
 import { z } from 'zod'
 import { app, dialog } from 'electron'
-import { basename } from 'node:path'
+import { statSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { basename, isAbsolute } from 'node:path'
+import type { AgentDiagnosticEntry } from '@shared/agent'
 import { RpcRegistry, type RpcContext } from './core'
 import { RpcError, invalidPath, notFound } from './errors'
 import { resolveGitRepo } from '../git/validate'
+import { encodePowerShellInvocation } from '../agents/agent-launch'
 
 // helper to define a method with params inferred from its schema
 function method<P, R>(
@@ -69,6 +73,36 @@ const createSessionFromTaskParams = z
   .object({ taskId: idSchema, agentId: agentIdSchema.optional() })
   .strict()
 const projectIdParams = z.object({ projectId: idSchema }).strict()
+const agentIdParams = z.object({ agentId: agentIdSchema }).strict()
+const agentEnabledParams = z
+  .object({ agentId: agentIdSchema, enabled: z.boolean() })
+  .strict()
+const agentIntegrationActionParams = z
+  .object({
+    agentId: agentIdSchema,
+    action: z.enum(['enable', 'repair', 'disable'])
+  })
+  .strict()
+
+async function collectAgentDiagnostics(ctx: RpcContext): Promise<AgentDiagnosticEntry[]> {
+  return Promise.all(
+    ctx.agentRegistry.descriptors().map(async (descriptor) => {
+      const adapter = ctx.agentRegistry.require(descriptor.id)
+      const settings = ctx.repositories.agentSettings.effective(descriptor.id)
+      const availability = await adapter.probe(settings.executablePath ?? undefined)
+      const diagnostic = adapter.managedIntegration?.diagnose() ?? null
+      return {
+        descriptor,
+        settings,
+        availability,
+        integration:
+          diagnostic === null
+            ? null
+            : { state: diagnostic.state, message: diagnostic.message }
+      }
+    })
+  )
+}
 
 // ── Build registry ───────────────────────────────────────────────────────────
 
@@ -76,7 +110,103 @@ export function buildRegistry(): RpcRegistry {
   const reg = new RpcRegistry()
 
   reg.register(
-    method('agents.list', emptyParams, (_p, { agentRegistry }) => agentRegistry.catalog())
+    method('agents.list', emptyParams, async (_p, { agentRegistry, repositories }) => {
+      const available = await Promise.all(
+        agentRegistry.catalog().map(async (entry) => {
+          const settings = repositories.agentSettings.effective(entry.descriptor.id)
+          if (!settings.enabled) return null
+          const probe = await agentRegistry.probe(
+            entry.descriptor.id,
+            settings.executablePath ?? undefined
+          )
+          return probe.status === 'available'
+            ? { entry, isDefault: settings.isDefault }
+            : null
+        })
+      )
+      return available
+        .filter((value): value is NonNullable<typeof value> => value !== null)
+        .sort((a, b) => Number(b.isDefault) - Number(a.isDefault))
+        .map(({ entry }) => entry)
+    })
+  )
+  reg.register(
+    method('agents.diagnostics', emptyParams, (_p, ctx) => collectAgentDiagnostics(ctx))
+  )
+  reg.register(
+    method('agents.pickExecutable', agentIdParams, async (p, ctx) => {
+      const adapter = ctx.agentRegistry.get(p.agentId)
+      if (adapter === null) throw notFound('Coding Agent')
+      if (ctx.sender === null) return null
+      const result = await dialog.showOpenDialog(ctx.sender, {
+        title: `选择 ${adapter.descriptor.label} 可执行文件`,
+        properties: ['openFile']
+      })
+      if (result.canceled || result.filePaths.length === 0) return null
+      const executablePath = result.filePaths[0]
+      let isFile = false
+      try {
+        isFile = isAbsolute(executablePath) && statSync(executablePath).isFile()
+      } catch {
+        isFile = false
+      }
+      if (!isFile) throw invalidPath('请选择真实存在的可执行文件')
+      return ctx.repositories.agentSettings.setExecutablePath(p.agentId, executablePath)
+    })
+  )
+  reg.register(
+    method('agents.clearExecutable', agentIdParams, (p, ctx) => {
+      if (ctx.agentRegistry.get(p.agentId) === null) throw notFound('Coding Agent')
+      return ctx.repositories.agentSettings.setExecutablePath(p.agentId, null)
+    })
+  )
+  reg.register(
+    method('agents.setEnabled', agentEnabledParams, (p, ctx) => {
+      if (ctx.agentRegistry.get(p.agentId) === null) throw notFound('Coding Agent')
+      return ctx.repositories.agentSettings.setEnabled(p.agentId, p.enabled)
+    })
+  )
+  reg.register(
+    method('agents.setDefault', agentIdParams, (p, ctx) => {
+      if (ctx.agentRegistry.get(p.agentId) === null) throw notFound('Coding Agent')
+      return ctx.repositories.agentSettings.setDefault(p.agentId)
+    })
+  )
+  reg.register(
+    method('agents.openLoginTerminal', agentIdParams, async (p, ctx) => {
+      const adapter = ctx.agentRegistry.get(p.agentId)
+      if (adapter === null) throw notFound('Coding Agent')
+      const settings = ctx.repositories.agentSettings.effective(p.agentId)
+      const launch = adapter.buildLogin?.(settings.executablePath ?? undefined)
+      if (launch === undefined) {
+        throw new RpcError('CONFLICT', '该 Coding Agent 不需要独立登录终端')
+      }
+      const availability = await adapter.probe(settings.executablePath ?? undefined)
+      if (availability.status !== 'available') {
+        throw new RpcError('CONFLICT', 'CLI 当前不可用，请先修正可执行文件路径')
+      }
+      const child = spawn(
+        'powershell.exe',
+        ['-NoLogo', '-NoExit', '-Command', encodePowerShellInvocation(launch)],
+        { detached: true, stdio: 'ignore', windowsHide: false }
+      )
+      child.unref()
+      return { ok: true as const }
+    })
+  )
+  reg.register(
+    method('agents.integrationAction', agentIntegrationActionParams, (p, ctx) => {
+      const integration = ctx.agentRegistry.get(p.agentId)?.managedIntegration
+      if (integration === undefined) throw notFound('Agent 事件集成')
+      if (p.action === 'disable') {
+        const diagnostic = integration.uninstall()
+        ctx.repositories.agentSettings.setIntegrationEnabled(p.agentId, false)
+        return { state: diagnostic.state, message: diagnostic.message }
+      }
+      ctx.repositories.agentSettings.setIntegrationEnabled(p.agentId, true)
+      const diagnostic = integration.ensureInstalled()
+      return { state: diagnostic.state, message: diagnostic.message }
+    })
   )
 
   // tasks
@@ -171,8 +301,16 @@ export function buildRegistry(): RpcRegistry {
       (p, { repositories, agentRegistry }) => {
         const task = repositories.tasks.get(p.taskId)
         if (task === null) throw notFound('任务')
-        const agentId = p.agentId ?? 'opencode'
+        const agentId =
+          p.agentId ??
+          agentRegistry
+            .descriptors()
+            .find(({ id }) => repositories.agentSettings.effective(id).isDefault)?.id ??
+          'opencode'
         if (agentRegistry.get(agentId) === null) throw notFound('Coding Agent')
+        if (!repositories.agentSettings.effective(agentId).enabled) {
+          throw new RpcError('CONFLICT', '该 Coding Agent 已停用')
+        }
         return repositories.sessions.createFromTask(p.taskId, agentId)
       }
     )

@@ -14,6 +14,7 @@
 | `probe`                      | 只读检测 CLI 和版本；不登录、不升级、不修改用户配置       |
 | `buildLaunch`                | 返回结构化 `executable / args / env`，不返回 Shell 字符串 |
 | `buildResume`                | 根据已校验引用生成恢复 argv；不支持恢复时返回 `null`      |
+| `buildLogin`（可选）         | 返回供应商原生交互登录 argv；设置页据此显示登录终端入口   |
 | `validateSessionRef`         | 校验引用种类、长度和供应商格式，拒绝控制字符与选项注入    |
 | `sessionLocator`（可选）     | 安全发现原生会话；失败不得影响终端使用                    |
 | `managedIntegration`（可选） | 检查、安装、修复和卸载带 DevStation 标识的 Hook/Plugin    |
@@ -26,7 +27,7 @@
 2. 如需从本地索引发现原生会话，把只读访问封装在同目录的 Locator 中，再通过 Adapter 的 `sessionLocator` 暴露统一引用。
 3. 使用 [`probeCli`](../src/main/agents/cli-probe.ts) 完成可用性检测；使用 Adapter 返回的结构化参数，统一安全编码由 [`agent-launch.ts`](../src/main/agents/agent-launch.ts) 负责。
 4. 在 [`src/main/index.ts`](../src/main/index.ts) 的组合根注册 Adapter。注册键必须匹配 Session 保存的 `agentId`。
-5. 创建该 Agent 的 Session。当前可由 `SessionRepo.createFromTask(taskId, agentId)` 写入绑定；用户选择和默认 Agent 将由设置中心统一承载。
+5. 创建该 Agent 的 Session。`SessionRepo.createFromTask(taskId, agentId)` 写入绑定；设置中心统一承载可用性、启停、CLI 路径和默认 Agent。
 6. 添加 Adapter 契约测试和显式启用的本机 Smoke，再运行 `npm run verify:pr`。
 
 ## 接入供应商事件

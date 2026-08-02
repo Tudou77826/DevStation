@@ -9,13 +9,15 @@ import { OpenCodeAdapter } from './agents/opencode-adapter'
 import { OpenCodeManagedIntegration } from './agents/opencode-managed-integration'
 import { ChrysAdapter } from './agents/chrys-adapter'
 import { ChrysManagedIntegration } from './agents/chrys-managed-integration'
+import { E2ETestAgentAdapter } from './agents/e2e-test-adapter'
+import type { CodingAgentAdapter } from './agents/adapter'
 import { AgentRegistry } from './agents/registry'
 import { AgentRuntimeService } from './agents/runtime-service'
 import { ManagedEventBridge } from './agents/managed-event-bridge'
 import { AgentEventInbox } from './agents/agent-event-inbox'
 import { Database } from './db/database'
 import { initializeDatabase } from './db/schema'
-import { ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
+import { AgentSettingsRepo, ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
 import { buildRegistry } from './rpc/methods'
 import { createDispatcher } from './rpc/dispatcher'
 import type { RpcContext } from './rpc/core'
@@ -73,6 +75,7 @@ function applyWindowChrome(window: BrowserWindow, theme: 'dark' | 'light'): void
   type OverlayCapable = BrowserWindow & {
     setTitleBarOverlay?: (opts: { color: string; symbolColor: string }) => void
   }
+
   const overlay = (window as OverlayCapable).setTitleBarOverlay
   if (typeof overlay === 'function') {
     try {
@@ -163,6 +166,7 @@ function initPersistence(): {
   tasks: TaskRepo
   projects: ProjectRepo
   sessions: SessionRepo
+  agentSettings: AgentSettingsRepo
 } {
   const dbPath = join(app.getPath('userData'), 'devstation.db')
   const database = new Database(dbPath)
@@ -171,7 +175,8 @@ function initPersistence(): {
   return {
     tasks: new TaskRepo(database),
     projects: new ProjectRepo(database),
-    sessions: new SessionRepo(database)
+    sessions: new SessionRepo(database),
+    agentSettings: new AgentSettingsRepo(database)
   }
 }
 
@@ -192,6 +197,10 @@ void app.whenReady().then(() => {
     return
   }
 
+  if (process.env['DEVSTATION_E2E'] === '1') {
+    repositories.agentSettings.setDefault('test-agent')
+  }
+
   // 2. Build the provider-neutral Agent catalog before exposing RPC so session
   // creation can validate the selected adapter at the Main boundary.
   const isolateExternalIntegrations =
@@ -207,18 +216,22 @@ void app.whenReady().then(() => {
       ? { configRoot: join(app.getPath('userData'), 'integrations', 'chrys') }
       : {}
   )
-  for (const [label, diagnostic] of [
-    ['OpenCode', openCodeIntegration.ensureInstalled()],
-    ['Chrys', chrysIntegration.ensureInstalled()]
+  for (const [agentId, label, integration] of [
+    ['opencode', 'OpenCode', openCodeIntegration],
+    ['chrys', 'Chrys', chrysIntegration]
   ] as const) {
+    if (!repositories.agentSettings.effective(agentId).integrationEnabled) continue
+    const diagnostic = integration.ensureInstalled()
     if (diagnostic.state !== 'current') {
       console.warn(`[DevStation] ${label} event integration unavailable:`, diagnostic)
     }
   }
-  const agentRegistry = new AgentRegistry([
+  const adapters: CodingAgentAdapter[] = [
     new OpenCodeAdapter(new OpenCodeSessionLocator(), openCodeIntegration),
     new ChrysAdapter(chrysIntegration)
-  ])
+  ]
+  if (process.env['DEVSTATION_E2E'] === '1') adapters.push(new E2ETestAgentAdapter())
+  const agentRegistry = new AgentRegistry(adapters)
 
   // 3. RPC dispatcher on a single channel, sender-bound context.
   const rpcRegistry = buildRegistry()
@@ -275,6 +288,7 @@ void app.whenReady().then(() => {
   const agentRuntime = new AgentRuntimeService({
     registry: agentRegistry,
     sessions: repositories.sessions,
+    agentSettings: repositories.agentSettings,
     eventBridge
   })
   terminalManager = new TerminalManager({
