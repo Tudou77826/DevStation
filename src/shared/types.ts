@@ -20,12 +20,15 @@ export interface DevStationAPI {
     update: (theme: 'dark' | 'light') => Promise<unknown>
   }
   readonly terminal: {
-    create: (request: TerminalCreateRequest) => Promise<TerminalSession>
+    connect: (request: TerminalConnectRequest) => Promise<TerminalSession>
+    /** Stop forwarding output to this window without stopping the PTY. */
+    disconnect: (sessionId: string) => Promise<void>
     write: (sessionId: string, data: string) => Promise<void>
     resize: (sessionId: string, cols: number, rows: number) => Promise<void>
     close: (sessionId: string) => Promise<void>
     onData: (listener: (event: TerminalDataEvent) => void) => () => void
     onExit: (listener: (event: TerminalExitEvent) => void) => () => void
+    onHostState: (listener: (event: TerminalHostStateEvent) => void) => () => void
   }
   /**
    * Invoke a registered RPC method. The dispatcher validates params (Zod) and
@@ -39,21 +42,34 @@ export interface DevStationAPI {
   }
 }
 
-export type TerminalLaunchKind = 'shell' | 'codex'
+export type TerminalContext =
+  { type: 'workspace'; projectId: string | null } | { type: 'session'; sessionId: string }
 
-export interface TerminalCreateRequest {
-  kind: TerminalLaunchKind
+export interface TerminalConnectRequest {
+  context: TerminalContext
   cols: number
   rows: number
-  cwd?: string
 }
 
 export interface TerminalSession {
   id: string
   pid: number
-  kind: TerminalLaunchKind
   cwd: string
   shell: string
+  context: TerminalContext
+  isNew: boolean
+  agentType: 'opencode' | null
+  /** True when a new PowerShell used the Agent's native resume command. */
+  agentResumed: boolean
+  /** Current daemon-side terminal contents used to rebuild xterm after attach. */
+  snapshot: string
+  host: TerminalHostInfo
+}
+
+export interface TerminalHostInfo {
+  protocolVersion: number
+  processId: number
+  startedAt: number
 }
 
 export interface TerminalDataEvent {
@@ -65,6 +81,12 @@ export interface TerminalExitEvent {
   sessionId: string
   exitCode: number
   signal?: number
+  reason: 'exited' | 'stopped'
+}
+
+export interface TerminalHostStateEvent {
+  state: 'connected' | 'disconnected'
+  message?: string
 }
 
 /** First-level navigation entries in the left sidebar. */

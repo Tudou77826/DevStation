@@ -22,11 +22,17 @@ describe('schema + migrations', () => {
     })
   })
 
-  it('installs the v2 pinned guards for pre-release v1 databases', () => {
+  it('migrates legacy sessions to the OpenCode binding schema', () => {
     const db = new Database(':memory:')
     createLegacyV1Schema(db)
     migrate(db)
     expect(db.pragmaValue('user_version')).toBe(SCHEMA_VERSION)
+    const columns = db.prepare('PRAGMA table_info(sessions)').all() as {
+      name: string
+    }[]
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining(['agent_type', 'agent_session_id'])
+    )
     expect(() =>
       db
         .prepare(

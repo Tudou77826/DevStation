@@ -33,6 +33,7 @@ export interface Project {
 }
 
 export type SessionStatus = 'idle' | 'running' | 'waiting' | 'done' | 'failed'
+export type CodingAgentType = 'opencode'
 
 export interface Session {
   id: string
@@ -46,6 +47,10 @@ export interface Session {
   projectId: string | null
   title: string
   status: SessionStatus
+  /** Coding Agent used by this workspace session. MVP initially supports OpenCode. */
+  agentType: CodingAgentType
+  /** Provider-owned session id used by the Agent's native resume command. */
+  agentSessionId: string | null
   lastOpenedAt: number | null
   createdAt: number
   updatedAt: number

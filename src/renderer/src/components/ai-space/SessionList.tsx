@@ -1,14 +1,21 @@
 import { useEffect, useState } from 'react'
-import { Plus, MessageSquare, Clock, Loader2, AlertCircle } from 'lucide-react'
+import {
+  Plus,
+  MessageSquare,
+  Clock,
+  Loader2,
+  AlertCircle,
+  ArrowUpRight
+} from 'lucide-react'
 import { useDataStore } from '@/store/data'
+import { useNavStore } from '@/store/nav'
 import { cn } from '@/lib/utils'
 import type { Session } from '@shared/domain'
 
 const EMPTY_SESSIONS: Session[] = []
 
-// Session list, usable in two scopes: by-project (ProjectsView) or by-task
-// (TaskPanel detail). Clicking a session records last_opened_at (touch); it does
-// NOT start an Agent — that is out of Stage 2 scope.
+// Session list, usable in two scopes: by-project or by-task. A session is a
+// direct entry into its Agent workspace, not a passive history row.
 export function SessionList({
   projectId,
   taskId
@@ -27,6 +34,8 @@ export function SessionList({
   const loadByTask = useDataStore((s) => s.loadSessionsByTask)
   const createFromTask = useDataStore((s) => s.createSessionFromTask)
   const touchSession = useDataStore((s) => s.touchSession)
+  const setSection = useNavStore((s) => s.setSection)
+  const selectSession = useNavStore((s) => s.selectSession)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,8 +67,14 @@ export function SessionList({
     await createFromTask(taskId)
   }
 
-  async function handleTouch(id: string): Promise<void> {
-    await touchSession(id)
+  function handleOpen(session: Session): void {
+    if (session.projectId === null) {
+      setError('该会话未关联项目，请先为任务关联本地项目')
+      return
+    }
+    selectSession(session.id, session.projectId)
+    setSection('ai-space')
+    void touchSession(session.id)
   }
 
   return (
@@ -97,11 +112,12 @@ export function SessionList({
             <button
               key={s.id}
               type="button"
-              onClick={() => void handleTouch(s.id)}
+              onClick={() => handleOpen(s)}
               className={cn(
-                'flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors',
-                'hover:bg-accent/50'
+                'group flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors',
+                'hover:bg-accent/50 focus-visible:bg-accent/50 focus-visible:outline-none'
               )}
+              title={s.projectId === null ? '请先为任务关联本地项目' : '在 AI 空间中打开'}
             >
               <MessageSquare size={15} className="shrink-0 text-muted-foreground" />
               <span className="min-w-0 flex-1">
@@ -116,6 +132,11 @@ export function SessionList({
                 </span>
               </span>
               <StatusBadge status={s.status} />
+              <ArrowUpRight
+                size={13}
+                className="shrink-0 text-muted-foreground/40 transition-colors group-hover:text-foreground group-focus-visible:text-foreground"
+                aria-hidden="true"
+              />
             </button>
           ))}
         </div>

@@ -145,6 +145,20 @@
     overflow: hidden;
   }
 
+  /* Chromium delegates <option> popup rendering to the platform on Windows.
+     Explicit colors keep native project/status menus readable in dark mode. */
+  select {
+    color-scheme: light;
+  }
+  .dark select {
+    color-scheme: dark;
+  }
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+
   /* Thin, theme-aware scrollbars to match the dense Codex-like layout. */
   ::-webkit-scrollbar {
     width: 8px;
