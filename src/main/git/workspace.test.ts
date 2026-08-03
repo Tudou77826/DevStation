@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { writeFile as writeFileAsync } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -156,9 +157,11 @@ describe('GitWorkspaceService', () => {
   })
 
   it('returns every repository file after the former 2000-item boundary', async () => {
-    for (let index = 0; index < 2_001; index += 1) {
-      write(`bulk-${index.toString().padStart(4, '0')}.txt`, '')
-    }
+    await Promise.all(
+      Array.from({ length: 2_001 }, (_, index) =>
+        writeFileAsync(join(root, `bulk-${index.toString().padStart(4, '0')}.txt`), '')
+      )
+    )
 
     const result = await service().files('session', '')
     const files = result.entries.filter((entry) => entry.kind === 'file')
