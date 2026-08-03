@@ -9,6 +9,7 @@ import type { AgentDiagnosticEntry } from '@shared/agent'
 import { RpcRegistry, type RpcContext } from './core'
 import { RpcError, invalidPath, notFound } from './errors'
 import { resolveGitRepo } from '../git/validate'
+import { validateRelativePath } from '../git/workspace'
 import { encodePowerShellInvocation } from '../agents/agent-launch'
 import type { ManagedIntegrationDiagnostic } from '../agents/adapter'
 
@@ -91,6 +92,41 @@ const agentSettingParams = z
     value: z.union([z.string().max(PATH_MAX), z.boolean(), z.null()])
   })
   .strict()
+const sessionIdParams = z.object({ sessionId: idSchema }).strict()
+const relativePathSchema = z.string().min(1).max(PATH_MAX)
+const gitAreaSchema = z.enum(['staged', 'worktree'])
+const gitDiffParams = z
+  .object({ sessionId: idSchema, path: relativePathSchema, area: gitAreaSchema })
+  .strict()
+const gitPreviewParams = z
+  .object({ sessionId: idSchema, path: relativePathSchema })
+  .strict()
+const reviewListParams = z
+  .object({
+    sessionId: idSchema,
+    path: relativePathSchema.optional(),
+    area: gitAreaSchema.optional()
+  })
+  .strict()
+const reviewCreateParams = z
+  .object({
+    sessionId: idSchema,
+    path: relativePathSchema,
+    area: gitAreaSchema,
+    side: z.enum(['old', 'new']),
+    line: z.number().int().positive().max(10_000_000),
+    lineContent: z.string().max(20_000),
+    body: z.string().trim().min(1).max(4_000)
+  })
+  .strict()
+const reviewUpdateParams = z
+  .object({
+    sessionId: idSchema,
+    id: idSchema,
+    body: z.string().trim().min(1).max(4_000)
+  })
+  .strict()
+const reviewDeleteParams = z.object({ sessionId: idSchema, id: idSchema }).strict()
 
 async function collectAgentDiagnostics(ctx: RpcContext): Promise<AgentDiagnosticEntry[]> {
   return Promise.all(
@@ -363,6 +399,59 @@ export function buildRegistry(): RpcRegistry {
     method('sessions.touch', idParams, (p, { repositories }) =>
       repositories.sessions.touch(p.id)
     )
+  )
+
+  reg.register(
+    method('git.status', sessionIdParams, (p, ctx) =>
+      ctx.gitWorkspace.status(p.sessionId)
+    )
+  )
+  reg.register(
+    method('git.diff', gitDiffParams, (p, ctx) =>
+      ctx.gitWorkspace.diff(p.sessionId, p.path, p.area)
+    )
+  )
+  reg.register(
+    method('git.files', sessionIdParams, (p, ctx) => ctx.gitWorkspace.files(p.sessionId))
+  )
+  reg.register(
+    method('git.preview', gitPreviewParams, (p, ctx) =>
+      ctx.gitWorkspace.preview(p.sessionId, p.path)
+    )
+  )
+  reg.register(
+    method('reviews.list', reviewListParams, (p, { repositories }) =>
+      repositories.reviewComments.list(
+        p.sessionId,
+        p.path === undefined ? undefined : validateRelativePath(p.path),
+        p.area
+      )
+    )
+  )
+  reg.register(
+    method('reviews.create', reviewCreateParams, (p, { repositories }) =>
+      repositories.reviewComments.create({
+        ...p,
+        path: validateRelativePath(p.path)
+      })
+    )
+  )
+  reg.register(
+    method('reviews.update', reviewUpdateParams, (p, { repositories }) => {
+      const existing = repositories.reviewComments.get(p.id)
+      if (existing === null || existing.sessionId !== p.sessionId)
+        throw notFound('评审意见')
+      return repositories.reviewComments.update(p.id, p.body)
+    })
+  )
+  reg.register(
+    method('reviews.delete', reviewDeleteParams, (p, { repositories }) => {
+      const existing = repositories.reviewComments.get(p.id)
+      if (existing === null || existing.sessionId !== p.sessionId)
+        throw notFound('评审意见')
+      repositories.reviewComments.delete(p.id)
+      return { ok: true as const }
+    })
   )
 
   return reg

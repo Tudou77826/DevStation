@@ -7,7 +7,7 @@
 import type { Database } from './database'
 
 /** Current schema version. Bump when adding migrations. */
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
 const CREATE_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -83,6 +83,21 @@ CREATE TABLE IF NOT EXISTS agent_settings (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_settings_default
   ON agent_settings(is_default) WHERE is_default = 1;
+
+CREATE TABLE IF NOT EXISTS review_comments (
+  id           TEXT PRIMARY KEY,
+  session_id   TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  path         TEXT NOT NULL,
+  area         TEXT NOT NULL CHECK(area IN ('staged','worktree')),
+  side         TEXT NOT NULL CHECK(side IN ('old','new')),
+  line         INTEGER NOT NULL CHECK(line > 0),
+  line_content TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_review_comments_session_path
+  ON review_comments(session_id, path, area, created_at);
 `
 
 const PINNED_GUARD_SQL = `
@@ -189,6 +204,23 @@ ALTER TABLE agent_settings ADD COLUMN settings_version INTEGER NOT NULL DEFAULT 
 ALTER TABLE agent_settings ADD COLUMN settings_json TEXT NOT NULL DEFAULT '{}';
 `
 
+const REVIEW_COMMENTS_SQL = `
+CREATE TABLE review_comments (
+  id           TEXT PRIMARY KEY,
+  session_id   TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  path         TEXT NOT NULL,
+  area         TEXT NOT NULL CHECK(area IN ('staged','worktree')),
+  side         TEXT NOT NULL CHECK(side IN ('old','new')),
+  line         INTEGER NOT NULL CHECK(line > 0),
+  line_content TEXT NOT NULL,
+  body         TEXT NOT NULL,
+  created_at   INTEGER NOT NULL,
+  updated_at   INTEGER NOT NULL
+);
+CREATE INDEX idx_review_comments_session_path
+  ON review_comments(session_id, path, area, created_at);
+`
+
 /** Create the initial tables/indexes. Called only from the migration transaction. */
 export function createTables(db: Database): void {
   db.exec(CREATE_SQL)
@@ -220,6 +252,7 @@ export function migrate(db: Database): void {
     if (storedVersion < 5 && storedVersion >= 1) db.exec(AGENT_EVENT_INBOX_SQL)
     if (storedVersion < 6 && storedVersion >= 1) db.exec(AGENT_SETTINGS_SQL)
     if (storedVersion < 7 && storedVersion >= 6) db.exec(VERSIONED_AGENT_SETTINGS_SQL)
+    if (storedVersion < 8 && storedVersion >= 1) db.exec(REVIEW_COMMENTS_SQL)
     db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
   })
 }

@@ -4,10 +4,10 @@ import {
   _electron as electron,
   type ElectronApplication
 } from '@playwright/test'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { delimiter, join } from 'node:path'
+import { basename, delimiter, join } from 'node:path'
 
 const workspaceRoot = process.cwd()
 
@@ -306,6 +306,69 @@ test('AI 工作区在应用重启后接回同一个 PowerShell PTY', async () =>
   } finally {
     await closeQuietly(app)
     await rm(profile, { recursive: true, force: true })
+  }
+})
+
+test('当前仓库变更、Diff 与本地行级意见在重启后恢复', async () => {
+  const profile = await mkdtemp(join(tmpdir(), 'devstation-e2e-'))
+  const repo = await mkdtemp(join(tmpdir(), 'devstation-review-repo-'))
+  let app: ElectronApplication | null = null
+
+  try {
+    execFileSync('git', ['init', repo])
+    execFileSync('git', ['-C', repo, 'config', 'user.email', 'devstation@example.test'])
+    execFileSync('git', ['-C', repo, 'config', 'user.name', 'DevStation Test'])
+    await writeFile(join(repo, 'review.ts'), 'export const before = 1\n')
+    execFileSync('git', ['-C', repo, 'add', 'review.ts'])
+    execFileSync('git', ['-C', repo, 'commit', '-m', 'base'])
+    await writeFile(join(repo, 'review.ts'), 'export const after = 2\n')
+
+    app = await launch(profile, { DEVSTATION_E2E_PROJECT_PATH: repo })
+    let page = await app.firstWindow()
+    await page.getByRole('button', { name: 'AI 空间' }).click()
+    await page.getByRole('button', { name: '添加本地项目' }).click()
+    await page.getByRole('button', { name: '任务面板' }).click()
+    await page.getByTitle('新建任务').click()
+    await page.getByLabel('任务标题').fill('Diff 验收')
+    await page.getByLabel('任务标题').press('Enter')
+    await page.getByLabel('关联项目').selectOption({ label: basename(repo) })
+    await page.getByRole('button', { name: '新建工作会话' }).click()
+    await page.getByRole('button', { name: /Diff 验收 会话/ }).click()
+
+    await page
+      .getByRole('region', { name: 'AI 空间工作区' })
+      .getByRole('button', { name: '变更', exact: true })
+      .click()
+    const inspector = page.getByRole('complementary', { name: '上下文侧栏' })
+    await expect(inspector.getByText('review.ts')).toBeVisible()
+    await inspector.getByText('review.ts').click()
+    await expect(inspector.getByText('export const after = 2')).toBeVisible()
+    await inspector
+      .getByText('export const after = 2')
+      .locator('..')
+      .getByRole('button', { name: '添加行级意见' })
+      .click()
+    await inspector.getByPlaceholder('记录评审意见…').fill('确认常量命名是否符合约定')
+    await inspector.getByRole('button', { name: '保存' }).click()
+    await expect(inspector.getByText('确认常量命名是否符合约定')).toBeVisible()
+
+    await page.getByRole('button', { name: '结束进程' }).click()
+    await closeQuietly(app)
+    app = null
+    app = await launch(profile, { DEVSTATION_E2E_PROJECT_PATH: repo })
+    page = await app.firstWindow()
+    await page
+      .getByRole('region', { name: 'AI 空间工作区' })
+      .getByRole('button', { name: '变更', exact: true })
+      .click()
+    const restoredInspector = page.getByRole('complementary', { name: '上下文侧栏' })
+    await restoredInspector.getByText('review.ts').click()
+    await expect(restoredInspector.getByText('确认常量命名是否符合约定')).toBeVisible()
+    await page.getByRole('button', { name: '结束进程' }).click()
+  } finally {
+    await closeQuietly(app)
+    await rm(profile, { recursive: true, force: true })
+    await rm(repo, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
   }
 })
 

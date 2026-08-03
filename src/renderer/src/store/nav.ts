@@ -145,7 +145,7 @@ export const useNavStore = create<NavState>()(
       closeRightPanel: () => set({ rightPanelOpen: false }),
       showAiRightPanel: (view) => set({ aiRightPanelView: view, rightPanelOpen: true }),
       setSidebarWidth: (w) => set({ sidebarWidth: clamp(w, 200, 360) }),
-      setRightPanelWidth: (w) => set({ rightPanelWidth: clamp(w, 260, 480) })
+      setRightPanelWidth: (w) => set({ rightPanelWidth: clamp(w, 300, 720) })
     }),
     {
       name: NAV_STORAGE_KEY,

@@ -6,7 +6,7 @@ type ExitListener = (event: { exitCode: number; signal?: number }) => void
 const ptyMock = vi.hoisted(() => ({ spawn: vi.fn() }))
 vi.mock('node-pty', () => ({ spawn: ptyMock.spawn }))
 
-import { TerminalHost } from './terminal-host'
+import { TerminalHost, terminatePtyTree } from './terminal-host'
 import { TERMINAL_HOST_PROTOCOL_VERSION } from './terminal-host-protocol'
 
 function fakePty(pid = 42) {
@@ -99,7 +99,7 @@ describe('TerminalHost', () => {
   it('caps retained output and only kills a PTY on explicit close', () => {
     const pty = fakePty()
     ptyMock.spawn.mockReturnValue(pty)
-    const host = new TerminalHost()
+    const host = new TerminalHost(undefined, Date.now, (terminal) => terminal.kill())
     host.createOrAttach(request())
     pty.emitData('a'.repeat(1_500_000))
     pty.emitData('b'.repeat(1_500_000))
@@ -172,12 +172,32 @@ describe('TerminalHost', () => {
     const first = fakePty(1)
     const second = fakePty(2)
     ptyMock.spawn.mockReturnValueOnce(first).mockReturnValueOnce(second)
-    const host = new TerminalHost()
+    const host = new TerminalHost(undefined, Date.now, (terminal) => terminal.kill())
     host.createOrAttach(request())
     host.createOrAttach({ ...request(), sessionId: 'session:two' })
     host.closeAll()
     expect(first.kill).toHaveBeenCalledOnce()
     expect(second.kill).toHaveBeenCalledOnce()
     expect(() => host.write('session:one', 'late')).toThrow('Terminal session not found')
+  })
+
+  it('terminates the complete Windows console tree with a fixed taskkill invocation', () => {
+    const pty = fakePty(4321)
+    const execute = vi.fn()
+    terminatePtyTree(pty, 'win32', execute)
+    expect(execute).toHaveBeenCalledWith(
+      'taskkill.exe',
+      ['/PID', '4321', '/T', '/F'],
+      expect.objectContaining({ windowsHide: true, stdio: 'ignore', timeout: 3_000 })
+    )
+    expect(pty.kill).not.toHaveBeenCalled()
+
+    execute.mockImplementation(() => {
+      throw new Error('taskkill unavailable')
+    })
+    terminatePtyTree(pty, 'win32', execute)
+    expect(pty.kill).toHaveBeenCalledOnce()
+    terminatePtyTree(pty, 'linux', execute)
+    expect(pty.kill).toHaveBeenCalledTimes(2)
   })
 })

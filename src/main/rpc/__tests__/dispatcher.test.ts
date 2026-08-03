@@ -34,6 +34,7 @@ const ctx: RpcContext = {
   repositories: {} as RpcContext['repositories'],
   agentRegistry: {} as RpcContext['agentRegistry'],
   agentSettings: {} as RpcContext['agentSettings'],
+  gitWorkspace: {} as RpcContext['gitWorkspace'],
   sender: null
 }
 

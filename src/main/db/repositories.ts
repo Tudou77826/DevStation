@@ -8,7 +8,14 @@
 import { randomUUID } from 'node:crypto'
 import type { Database, SqlValue } from './database'
 import { RpcError, notFound } from '../rpc/errors'
-import type { Project, Session, Task, TaskStatus } from '@shared/domain'
+import type {
+  Project,
+  ReviewComment,
+  ReviewCommentSide,
+  Session,
+  Task,
+  TaskStatus
+} from '@shared/domain'
 import type {
   AgentEvent,
   AgentSessionRef,
@@ -566,6 +573,108 @@ export class SessionRepo {
         )
       return { outcome, session: this.get(event.devStationSessionId) }
     })
+  }
+}
+
+interface ReviewCommentRow {
+  id: string
+  session_id: string
+  path: string
+  area: string
+  side: string
+  line: number
+  line_content: string
+  body: string
+  created_at: number
+  updated_at: number
+}
+
+function mapReviewComment(row: ReviewCommentRow): ReviewComment {
+  return {
+    id: row.id,
+    sessionId: row.session_id,
+    path: row.path,
+    area: row.area as ReviewComment['area'],
+    side: row.side as ReviewCommentSide,
+    line: row.line,
+    lineContent: row.line_content,
+    body: row.body,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }
+}
+
+export class ReviewCommentRepo {
+  constructor(private readonly db: Database) {}
+
+  list(sessionId: string, path?: string, area?: ReviewComment['area']): ReviewComment[] {
+    const where = ['session_id = ?']
+    const params: SqlValue[] = [sessionId]
+    if (path !== undefined) {
+      where.push('path = ?')
+      params.push(path)
+    }
+    if (area !== undefined) {
+      where.push('area = ?')
+      params.push(area)
+    }
+    return asRows<ReviewCommentRow>(
+      this.db
+        .prepare(
+          `SELECT * FROM review_comments WHERE ${where.join(' AND ')} ORDER BY created_at ASC`
+        )
+        .all(...params)
+    ).map(mapReviewComment)
+  }
+
+  get(id: string): ReviewComment | null {
+    const row = asRow<ReviewCommentRow>(
+      this.db.prepare('SELECT * FROM review_comments WHERE id = ?').get(id)
+    )
+    return row === undefined ? null : mapReviewComment(row)
+  }
+
+  create(input: Omit<ReviewComment, 'id' | 'createdAt' | 'updatedAt'>): ReviewComment {
+    if (
+      this.db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(input.sessionId) ===
+      undefined
+    ) {
+      throw notFound('会话')
+    }
+    const id = randomUUID()
+    const now = Date.now()
+    this.db
+      .prepare(
+        `INSERT INTO review_comments
+         (id, session_id, path, area, side, line, line_content, body, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        id,
+        input.sessionId,
+        input.path,
+        input.area,
+        input.side,
+        input.line,
+        input.lineContent,
+        input.body,
+        now,
+        now
+      )
+    return this.get(id)!
+  }
+
+  update(id: string, body: string): ReviewComment {
+    if (this.get(id) === null) throw notFound('评审意见')
+    this.db
+      .prepare('UPDATE review_comments SET body = ?, updated_at = ? WHERE id = ?')
+      .run(body, Date.now(), id)
+    return this.get(id)!
+  }
+
+  delete(id: string): void {
+    const result = this.db.prepare('DELETE FROM review_comments WHERE id = ?').run(id)
+    if (result.changes === 0) throw notFound('评审意见')
   }
 }
 

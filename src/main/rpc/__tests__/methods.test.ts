@@ -58,6 +58,13 @@ function repositories() {
       setEnabled: vi.fn(),
       setIntegrationEnabled: vi.fn(),
       setDefault: vi.fn()
+    },
+    reviewComments: {
+      list: vi.fn(),
+      get: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn()
     }
   }
 }
@@ -82,6 +89,12 @@ function context(
       effective: vi.fn((agentId: string) => repos.agentSettings.effective(agentId)),
       setValue: vi.fn((agentId: string) => repos.agentSettings.effective(agentId))
     } as unknown as RpcContext['agentSettings'],
+    gitWorkspace: {
+      status: vi.fn(),
+      diff: vi.fn(),
+      files: vi.fn(),
+      preview: vi.fn()
+    } as unknown as RpcContext['gitWorkspace'],
     sender
   }
 }
@@ -131,7 +144,15 @@ describe('RPC method registry', () => {
       'sessions.createFromTask',
       'sessions.listByTask',
       'sessions.listByProject',
-      'sessions.touch'
+      'sessions.touch',
+      'git.status',
+      'git.diff',
+      'git.files',
+      'git.preview',
+      'reviews.list',
+      'reviews.create',
+      'reviews.update',
+      'reviews.delete'
     ]
     expect(names.every((name) => registry.has(name))).toBe(true)
   })
@@ -160,6 +181,89 @@ describe('RPC method registry', () => {
 
     await expect(call('agents.list', {}, ctx)).resolves.toEqual(catalog)
     expect(ctx.agentRegistry.catalog).toHaveBeenCalledOnce()
+  })
+
+  it('delegates read-only Git operations using session-scoped params', async () => {
+    const ctx = context()
+    vi.mocked(ctx.gitWorkspace.status).mockResolvedValue({ changes: [] } as never)
+    vi.mocked(ctx.gitWorkspace.diff).mockResolvedValue({ kind: 'empty' } as never)
+    vi.mocked(ctx.gitWorkspace.files).mockResolvedValue({
+      files: [{ path: 'a.ts' }],
+      truncated: false
+    })
+    vi.mocked(ctx.gitWorkspace.preview).mockResolvedValue({ kind: 'text' } as never)
+
+    await expect(call('git.status', { sessionId: 's1' }, ctx)).resolves.toEqual({
+      changes: []
+    })
+    await expect(
+      call('git.diff', { sessionId: 's1', path: 'src/a.ts', area: 'staged' }, ctx)
+    ).resolves.toEqual({ kind: 'empty' })
+    await expect(call('git.files', { sessionId: 's1' }, ctx)).resolves.toEqual({
+      files: [{ path: 'a.ts' }],
+      truncated: false
+    })
+    await expect(
+      call('git.preview', { sessionId: 's1', path: 'src/a.ts' }, ctx)
+    ).resolves.toEqual({ kind: 'text' })
+    expect(ctx.gitWorkspace.diff).toHaveBeenCalledWith('s1', 'src/a.ts', 'staged')
+    expect(ctx.gitWorkspace.preview).toHaveBeenCalledWith('s1', 'src/a.ts')
+  })
+
+  it('validates and owns local review comment CRUD by session', async () => {
+    const repos = repositories()
+    const ctx = context(repos)
+    const comment = {
+      id: 'r1',
+      sessionId: 's1',
+      path: 'src/a.ts',
+      area: 'worktree',
+      side: 'new',
+      line: 3,
+      lineContent: 'new line',
+      body: 'review'
+    }
+    repos.reviewComments.list.mockReturnValue([comment])
+    repos.reviewComments.create.mockReturnValue(comment)
+    repos.reviewComments.get.mockReturnValue(comment)
+    repos.reviewComments.update.mockReturnValue({ ...comment, body: 'updated' })
+
+    await expect(
+      call('reviews.list', { sessionId: 's1', path: 'src/a.ts', area: 'worktree' }, ctx)
+    ).resolves.toEqual([comment])
+    await expect(
+      call(
+        'reviews.create',
+        {
+          sessionId: 's1',
+          path: 'src/a.ts',
+          area: 'worktree',
+          side: 'new',
+          line: 3,
+          lineContent: 'new line',
+          body: ' review '
+        },
+        ctx
+      )
+    ).resolves.toEqual(comment)
+    await expect(
+      call('reviews.update', { sessionId: 's1', id: 'r1', body: 'updated' }, ctx)
+    ).resolves.toMatchObject({ body: 'updated' })
+    await expect(
+      call('reviews.delete', { sessionId: 's1', id: 'r1' }, ctx)
+    ).resolves.toEqual({ ok: true })
+
+    repos.reviewComments.get.mockReturnValue({ ...comment, sessionId: 'other' })
+    await expect(
+      call('reviews.update', { sessionId: 's1', id: 'r1', body: 'updated' }, ctx)
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    repos.reviewComments.get.mockReturnValue(null)
+    await expect(
+      call('reviews.delete', { sessionId: 's1', id: 'r1' }, ctx)
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(
+      call('reviews.create', { ...comment, path: '../secret', body: 'x' }, ctx)
+    ).rejects.toBeTruthy()
   })
 
   it('lists only enabled and available Agents with the persisted default first', async () => {

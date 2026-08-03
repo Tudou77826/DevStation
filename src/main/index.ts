@@ -18,7 +18,14 @@ import { ManagedEventBridge } from './agents/managed-event-bridge'
 import { AgentEventInbox } from './agents/agent-event-inbox'
 import { Database } from './db/database'
 import { initializeDatabase } from './db/schema'
-import { AgentSettingsRepo, ProjectRepo, SessionRepo, TaskRepo } from './db/repositories'
+import {
+  AgentSettingsRepo,
+  ProjectRepo,
+  ReviewCommentRepo,
+  SessionRepo,
+  TaskRepo
+} from './db/repositories'
+import { GitWorkspaceService } from './git/workspace'
 import { buildRegistry } from './rpc/methods'
 import { createDispatcher } from './rpc/dispatcher'
 import type { RpcContext } from './rpc/core'
@@ -168,6 +175,7 @@ function initPersistence(): {
   projects: ProjectRepo
   sessions: SessionRepo
   agentSettings: AgentSettingsRepo
+  reviewComments: ReviewCommentRepo
 } {
   const dbPath = join(app.getPath('userData'), 'devstation.db')
   const database = new Database(dbPath)
@@ -177,7 +185,8 @@ function initPersistence(): {
     tasks: new TaskRepo(database),
     projects: new ProjectRepo(database),
     sessions: new SessionRepo(database),
-    agentSettings: new AgentSettingsRepo(database)
+    agentSettings: new AgentSettingsRepo(database),
+    reviewComments: new ReviewCommentRepo(database)
   }
 }
 
@@ -247,6 +256,10 @@ void app.whenReady().then(() => {
     (sender): RpcContext => {
       return {
         repositories,
+        gitWorkspace: new GitWorkspaceService(
+          repositories.sessions,
+          repositories.projects
+        ),
         agentRegistry,
         agentSettings,
         sender: BrowserWindow.fromWebContents(sender)
