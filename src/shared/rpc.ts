@@ -102,6 +102,9 @@ export interface AgentSettingParam extends AgentIdParam {
 export interface SessionIdParam {
   sessionId: string
 }
+export interface GitFilesParam extends SessionIdParam {
+  path: string
+}
 export interface GitDiffParam extends SessionIdParam {
   path: string
   area: GitArea
@@ -173,7 +176,7 @@ export interface RpcMethodMap {
 
   'git.status': { params: SessionIdParam; result: GitRepositorySnapshot }
   'git.diff': { params: GitDiffParam; result: GitFileDiff }
-  'git.files': { params: SessionIdParam; result: GitWorkspaceFileList }
+  'git.files': { params: GitFilesParam; result: GitWorkspaceFileList }
   'git.preview': { params: GitPreviewParam; result: GitFilePreview }
 
   'reviews.list': { params: ReviewListParam; result: ReviewComment[] }

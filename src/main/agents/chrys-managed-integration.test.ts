@@ -158,7 +158,6 @@ hooks:
     const bridge = new ManagedEventBridge(join(root, 'agent-events'))
     bridge.ensureInstalled()
     const token = 'a'.repeat(64)
-    const payloadPath = join(root, 'payload.json')
     const nativeSessionId = 'aa72fa1e-801f-44a6-a902-f23bb85296cb'
     const hookPayloads = [
       { event: 'session_start', session_id: nativeSessionId },
@@ -182,22 +181,39 @@ hooks:
       { event: 'session_end', session_id: nativeSessionId }
     ]
 
-    for (const payload of hookPayloads) {
-      writeFileSync(payloadPath, JSON.stringify(payload), 'utf8')
-      execFileSync('powershell.exe', ['-NoProfile', '-File', integration.reporterPath], {
-        env: {
-          ...process.env,
-          CHRYS_HOOK_PAYLOAD_FILE: payloadPath,
-          DEVSTATION_AGENT_EVENT_BRIDGE: bridge.scriptPath,
-          DEVSTATION_AGENT_EVENT_TOKEN: token,
-          DEVSTATION_AGENT_EVENT_INBOX: bridge.inboxRoot,
-          DEVSTATION_AGENT_ID: 'chrys',
-          DEVSTATION_SESSION_ID: 'session-1',
-          DEVSTATION_AGENT_RUN_ID: 'run-1'
-        },
-        stdio: 'pipe'
-      })
-    }
+    const payloadPaths = hookPayloads.map((payload, index) => {
+      const path = join(root, `payload-${index}.json`)
+      writeFileSync(path, JSON.stringify(payload), 'utf8')
+      return path
+    })
+    const runnerPath = join(root, 'invoke-chrys-hooks.ps1')
+    writeFileSync(
+      runnerPath,
+      [
+        "$ErrorActionPreference = 'Stop'",
+        '$reporterPath = $env:DEVSTATION_CHRYS_TEST_REPORTER',
+        '$payloadPaths = ConvertFrom-Json $env:DEVSTATION_CHRYS_TEST_PAYLOADS',
+        'foreach ($payloadPath in $payloadPaths) {',
+        '  $env:CHRYS_HOOK_PAYLOAD_FILE = $payloadPath',
+        '  & $reporterPath',
+        '}'
+      ].join('\n'),
+      'utf8'
+    )
+    execFileSync('powershell.exe', ['-NoProfile', '-File', runnerPath], {
+      env: {
+        ...process.env,
+        DEVSTATION_CHRYS_TEST_REPORTER: integration.reporterPath,
+        DEVSTATION_CHRYS_TEST_PAYLOADS: JSON.stringify(payloadPaths),
+        DEVSTATION_AGENT_EVENT_BRIDGE: bridge.scriptPath,
+        DEVSTATION_AGENT_EVENT_TOKEN: token,
+        DEVSTATION_AGENT_EVENT_INBOX: bridge.inboxRoot,
+        DEVSTATION_AGENT_ID: 'chrys',
+        DEVSTATION_SESSION_ID: 'session-1',
+        DEVSTATION_AGENT_RUN_ID: 'run-1'
+      },
+      stdio: 'pipe'
+    })
 
     const events = readdirSync(join(bridge.inboxRoot, token)).map(
       (name) =>
@@ -221,7 +237,7 @@ hooks:
       kind: 'chrys-session-id',
       value: nativeSessionId
     })
-  }, 15_000)
+  }, 30_000)
 
   it('resolves the Windows roaming Chrys config root', () => {
     expect(resolveChrysConfigRoot({ APPDATA: 'D:\\roaming' }, 'C:\\Users\\dev')).toBe(

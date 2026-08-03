@@ -94,6 +94,10 @@ const agentSettingParams = z
   .strict()
 const sessionIdParams = z.object({ sessionId: idSchema }).strict()
 const relativePathSchema = z.string().min(1).max(PATH_MAX)
+const directoryPathSchema = z.string().max(PATH_MAX)
+const gitFilesParams = z
+  .object({ sessionId: idSchema, path: directoryPathSchema })
+  .strict()
 const gitAreaSchema = z.enum(['staged', 'worktree'])
 const gitDiffParams = z
   .object({ sessionId: idSchema, path: relativePathSchema, area: gitAreaSchema })
@@ -412,7 +416,9 @@ export function buildRegistry(): RpcRegistry {
     )
   )
   reg.register(
-    method('git.files', sessionIdParams, (p, ctx) => ctx.gitWorkspace.files(p.sessionId))
+    method('git.files', gitFilesParams, (p, ctx) =>
+      ctx.gitWorkspace.files(p.sessionId, p.path)
+    )
   )
   reg.register(
     method('git.preview', gitPreviewParams, (p, ctx) =>

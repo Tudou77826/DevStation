@@ -4,7 +4,7 @@ import {
   _electron as electron,
   type ElectronApplication
 } from '@playwright/test'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { basename, delimiter, join } from 'node:path'
@@ -375,6 +375,46 @@ test('当前仓库变更、Diff 与本地行级意见在重启后恢复', async 
         .getByRole('paragraph')
         .filter({ hasText: '确认常量命名是否符合约定' })
     ).toBeVisible()
+    await page.getByRole('button', { name: '结束进程' }).click()
+  } finally {
+    await closeQuietly(app)
+    await rm(profile, { recursive: true, force: true })
+    await rm(repo, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 })
+  }
+})
+
+test('文件侧栏完整读取真实目录并显示 Git 忽略内容', async () => {
+  const profile = await mkdtemp(join(tmpdir(), 'devstation-files-e2e-'))
+  const repo = await mkdtemp(join(tmpdir(), 'devstation-files-repo-'))
+  let app: ElectronApplication | null = null
+
+  try {
+    execFileSync('git', ['init', repo])
+    await writeFile(join(repo, '.gitignore'), 'ignored-dir/\n')
+    await mkdir(join(repo, 'ignored-dir'))
+    await writeFile(join(repo, 'ignored-dir', 'inside.txt'), 'ignored but visible\n')
+
+    app = await launch(profile, { DEVSTATION_E2E_PROJECT_PATH: repo })
+    const page = await app.firstWindow()
+    await page.getByRole('button', { name: 'AI 空间' }).click()
+    await page.getByRole('button', { name: '添加本地项目' }).click()
+    await page.getByRole('button', { name: '任务面板' }).click()
+    await page.getByTitle('新建任务').click()
+    await page.getByLabel('任务标题').fill('文件系统验收')
+    await page.getByLabel('关联项目').selectOption({ label: basename(repo) })
+    await page.getByRole('button', { name: '创建任务', exact: true }).click()
+    await page.getByRole('button', { name: '新建工作会话' }).click()
+    await page.getByRole('button', { name: /文件系统验收 会话/ }).click()
+
+    const inspector = page.getByRole('complementary', { name: '上下文侧栏' })
+    await inspector.getByRole('button', { name: '文件', exact: true }).click()
+    await expect(
+      inspector.getByRole('button', { name: '.git', exact: true })
+    ).toBeVisible()
+    await inspector.getByRole('button', { name: 'ignored-dir', exact: true }).click()
+    await expect(inspector.getByText('inside.txt')).toBeVisible()
+    await inspector.getByText('inside.txt').click()
+    await expect(inspector.getByText('ignored but visible')).toBeVisible()
     await page.getByRole('button', { name: '结束进程' }).click()
   } finally {
     await closeQuietly(app)

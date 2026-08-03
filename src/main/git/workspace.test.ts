@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -9,6 +9,7 @@ import {
   GitWorkspaceService,
   parseStatus,
   parseUnifiedDiff,
+  type WorkspaceDirectoryReader,
   validateRelativePath
 } from './workspace'
 
@@ -22,10 +23,11 @@ function write(path: string, content: string | Buffer): void {
   writeFileSync(join(root, path), content)
 }
 
-function service(): GitWorkspaceService {
+function service(readDirectory?: WorkspaceDirectoryReader): GitWorkspaceService {
   return new GitWorkspaceService(
     { get: () => ({ id: 'session', projectId: 'project' }) } as unknown as SessionRepo,
-    { get: () => ({ id: 'project', path: root }) } as unknown as ProjectRepo
+    { get: () => ({ id: 'project', path: root }) } as unknown as ProjectRepo,
+    readDirectory
   )
 }
 
@@ -114,21 +116,33 @@ describe('GitWorkspaceService', () => {
     expect(detached).toMatchObject({ branch: null, detached: true })
   })
 
-  it('lists tracked and unignored files and applies bounded preview states', async () => {
-    write('.gitignore', 'ignored.txt\n')
+  it('lists the real filesystem regardless of Git ignore rules and applies bounded previews', async () => {
+    write('.gitignore', 'ignored.txt\nignored-dir/\n')
     write('text.txt', 'hello\n')
     write('binary.bin', Buffer.from([1, 0, 2]))
     write('ignored.txt', 'ignore')
+    mkdirSync(join(root, 'ignored-dir'))
+    write('ignored-dir/inside.txt', 'visible')
     write('large.txt', Buffer.alloc(512 * 1024 + 1, 65))
     git('add', '.gitignore', 'text.txt', 'binary.bin')
     git('commit', '-m', 'files')
 
-    const result = await service().files('session')
-    expect(result.truncated).toBe(false)
-    expect(result.files.map((file) => file.path)).toEqual(
-      expect.arrayContaining(['.gitignore', 'text.txt', 'binary.bin', 'large.txt'])
+    const result = await service().files('session', '')
+    expect(result.entries).toEqual(
+      expect.arrayContaining([
+        { path: '.git', kind: 'directory' },
+        { path: 'ignored-dir', kind: 'directory' },
+        { path: '.gitignore', kind: 'file' },
+        { path: 'ignored.txt', kind: 'file' },
+        { path: 'text.txt', kind: 'file' },
+        { path: 'binary.bin', kind: 'file' },
+        { path: 'large.txt', kind: 'file' }
+      ])
     )
-    expect(result.files.map((file) => file.path)).not.toContain('ignored.txt')
+    await expect(service().files('session', 'ignored-dir')).resolves.toEqual({
+      directory: 'ignored-dir',
+      entries: [{ path: 'ignored-dir/inside.txt', kind: 'file' }]
+    })
     await expect(service().preview('session', 'text.txt')).resolves.toMatchObject({
       kind: 'text',
       content: 'hello\n'
@@ -141,6 +155,20 @@ describe('GitWorkspaceService', () => {
       kind: 'too-large',
       content: ''
     })
+  })
+
+  it('returns every repository file after the former 2000-item boundary', async () => {
+    const readDirectory: WorkspaceDirectoryReader = async () =>
+      Array.from({ length: 2_001 }, (_, index) => ({
+        name: `bulk-${index.toString().padStart(4, '0')}.txt`,
+        isDirectory: () => false,
+        isSymbolicLink: () => false
+      }))
+
+    const result = await service(readDirectory).files('session', '')
+    const files = result.entries.filter((entry) => entry.kind === 'file')
+    expect(files).toHaveLength(2_001)
+    expect(files.at(-1)).toEqual({ path: 'bulk-2000.txt', kind: 'file' })
   })
 
   it('rejects traversal and sessions without a valid saved project', async () => {

@@ -31,7 +31,8 @@ interface ReviewState {
   diff: GitFileDiff | null
   comments: ReviewComment[]
   files: GitWorkspaceFile[]
-  filesTruncated: boolean
+  loadedDirectories: string[]
+  loadingDirectories: string[]
   preview: GitFilePreview | null
   loading: boolean
   error: string | null
@@ -39,6 +40,7 @@ interface ReviewState {
   openDiff: (sessionId: string, path: string, area: GitArea) => Promise<void>
   closeDiff: () => void
   refreshFiles: (sessionId: string) => Promise<void>
+  loadDirectory: (sessionId: string, path: string) => Promise<void>
   openFile: (sessionId: string, path: string) => Promise<void>
   closeFile: () => void
   createComment: (input: {
@@ -62,7 +64,8 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
   diff: null,
   comments: [],
   files: [],
-  filesTruncated: false,
+  loadedDirectories: [],
+  loadingDirectories: [],
   preview: null,
   loading: false,
   error: null,
@@ -127,13 +130,80 @@ export const useReviewStore = create<ReviewState>((set, get) => ({
       loading: true,
       error: null,
       sessionId,
-      ...(switched ? { preview: null, selectedPath: null, diff: null, comments: [] } : {})
+      ...(switched
+        ? {
+            files: [],
+            loadedDirectories: [],
+            loadingDirectories: [],
+            preview: null,
+            selectedPath: null,
+            diff: null,
+            comments: []
+          }
+        : {})
     })
     try {
-      const result = unwrap(await rpc.invoke('git.files', { sessionId }))
-      set({ files: result.files, filesTruncated: result.truncated, loading: false })
+      const result = unwrap(await rpc.invoke('git.files', { sessionId, path: '' }))
+      set((current) =>
+        current.sessionId === sessionId
+          ? {
+              files: result.entries,
+              loadedDirectories: [''],
+              loadingDirectories: [],
+              loading: false
+            }
+          : current
+      )
     } catch (error) {
-      set({ files: [], filesTruncated: false, loading: false, error: message(error) })
+      set((current) =>
+        current.sessionId === sessionId
+          ? {
+              files: [],
+              loadedDirectories: [],
+              loadingDirectories: [],
+              loading: false,
+              error: message(error)
+            }
+          : current
+      )
+    }
+  },
+
+  async loadDirectory(sessionId, path) {
+    const state = get()
+    if (
+      state.sessionId !== sessionId ||
+      state.loadedDirectories.includes(path) ||
+      state.loadingDirectories.includes(path)
+    ) {
+      return
+    }
+    set({ loadingDirectories: [...state.loadingDirectories, path], error: null })
+    try {
+      const result = unwrap(await rpc.invoke('git.files', { sessionId, path }))
+      set((current) => {
+        if (current.sessionId !== sessionId) return current
+        const entries = new Map(current.files.map((entry) => [entry.path, entry]))
+        for (const entry of result.entries) entries.set(entry.path, entry)
+        return {
+          files: [...entries.values()],
+          loadedDirectories: [...current.loadedDirectories, path],
+          loadingDirectories: current.loadingDirectories.filter(
+            (directory) => directory !== path
+          )
+        }
+      })
+    } catch (error) {
+      set((current) =>
+        current.sessionId === sessionId
+          ? {
+              error: message(error),
+              loadingDirectories: current.loadingDirectories.filter(
+                (directory) => directory !== path
+              )
+            }
+          : current
+      )
     }
   },
 
