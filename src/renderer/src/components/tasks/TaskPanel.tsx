@@ -13,23 +13,25 @@ import { useDataStore } from '@/store/data'
 import type { Task } from '@shared/domain'
 import { cn } from '@/lib/utils'
 import { TaskDetailView } from './TaskDetailView'
+import { TaskCreateView } from './TaskCreateView'
 import { STATUS_META } from './task-meta'
 
 export function TaskPanel(): React.ReactElement {
   const filter = useNavStore((s) => s.activeSecondaryId.tasks)
   const selectedId = useNavStore((s) => s.selectedTaskId)
+  const createOpen = useNavStore((s) => s.taskCreateOpen)
   const selectTask = useNavStore((s) => s.selectTask)
+  const startTaskCreation = useNavStore((s) => s.startTaskCreation)
+  const showTaskList = useNavStore((s) => s.showTaskList)
 
   const tasks = useDataStore((s) => s.tasks)
   const projects = useDataStore((s) => s.projects)
   const loadTasks = useDataStore((s) => s.loadTasks)
-  const createTask = useDataStore((s) => s.createTask)
   const touchTask = useDataStore((s) => s.touchTask)
   const loading = useDataStore((s) => s.loading)
   const error = useDataStore((s) => s.error)
 
   const [keyword, setKeyword] = useState('')
-  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     void loadTasks()
@@ -51,16 +53,6 @@ export function TaskPanel(): React.ReactElement {
     )
   }, [tasks, filter, keyword])
 
-  async function handleCreate(): Promise<void> {
-    setCreating(true)
-    try {
-      const task = await createTask('新任务')
-      if (task !== null) selectTask(task.id)
-    } finally {
-      setCreating(false)
-    }
-  }
-
   function handleSelect(id: string): void {
     selectTask(id)
     void touchTask(id)
@@ -70,17 +62,24 @@ export function TaskPanel(): React.ReactElement {
     filter === 'in-progress' ? '进行中' : filter === 'done' ? '已完成' : '全部任务'
   const selected = tasks.find((task) => task.id === selectedId) ?? null
 
+  if (createOpen) {
+    return (
+      <section
+        className="flex min-h-0 flex-1 flex-col bg-background"
+        aria-label="任务工作区"
+      >
+        <TaskCreateView onCancel={showTaskList} onCreated={selectTask} />
+      </section>
+    )
+  }
+
   if (selected !== null) {
     return (
       <section
         className="flex min-h-0 flex-1 flex-col bg-background"
         aria-label="任务工作区"
       >
-        <TaskDetailView
-          key={selected.id}
-          task={selected}
-          onBack={() => selectTask(null)}
-        />
+        <TaskDetailView key={selected.id} task={selected} onBack={showTaskList} />
       </section>
     )
   }
@@ -107,9 +106,8 @@ export function TaskPanel(): React.ReactElement {
         <button
           type="button"
           title="新建任务"
-          onClick={() => void handleCreate()}
-          disabled={creating}
-          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          onClick={startTaskCreation}
+          className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
         >
           <Plus size={14} />
           新建任务
@@ -139,7 +137,7 @@ export function TaskPanel(): React.ReactElement {
         ) : filtered.length === 0 ? (
           <Hint text={keyword !== '' ? '没有匹配的任务' : '该筛选下暂无任务'} />
         ) : (
-          <div className="mx-auto max-w-5xl overflow-hidden rounded-xl border border-border bg-card">
+          <div className="w-full overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="grid grid-cols-[minmax(240px,1fr)_160px_110px_120px] gap-4 border-b border-border bg-muted/35 px-4 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
               <span>任务</span>
               <span>项目</span>

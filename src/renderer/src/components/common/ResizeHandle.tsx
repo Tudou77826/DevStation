@@ -5,10 +5,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // maps that onto its own clamped width state.
 export function ResizeHandle({
   onDelta,
+  onDragStart,
   side = 'right',
   title = '拖拽调整宽度'
 }: {
   onDelta: (deltaPx: number) => void
+  /** capture the panel's baseline width before cumulative deltas arrive */
+  onDragStart?: () => void
   /** which edge the handle sits on; flips the cursor hint only */
   side?: 'left' | 'right'
   title?: string
@@ -45,20 +48,21 @@ export function ResizeHandle({
     <div
       role="separator"
       aria-orientation="vertical"
-      title={title}
+      aria-label={title}
       onMouseDown={(e) => {
         e.preventDefault()
         startX.current = e.clientX
+        onDragStart?.()
         setDragging(true)
       }}
       className={
-        'group relative w-px shrink-0 cursor-col-resize bg-border transition-colors hover:bg-muted-foreground/50 ' +
+        'group relative z-20 w-px shrink-0 cursor-col-resize bg-border transition-colors hover:bg-muted-foreground/50 ' +
         (dragging ? 'bg-muted-foreground/60 ' : '') +
         (side === 'left' ? ' -ml-1' : ' -mr-1')
       }
     >
       {/* Widen the hit area without changing the visible 1px line. */}
-      <div className="absolute inset-y-0 -inset-x-1.5" />
+      <div className="absolute inset-y-0 -inset-x-2.5" />
     </div>
   )
 }

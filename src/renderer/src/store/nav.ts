@@ -59,6 +59,8 @@ interface NavState {
 
   /** selected task id in 任务面板 */
   selectedTaskId: string | null
+  /** transient task draft; a task is not persisted until the user confirms it */
+  taskCreateOpen: boolean
 
   /** AI Space tree selection and expansion. Projects are the tree roots. */
   selectedProjectId: string | null
@@ -77,6 +79,8 @@ interface NavState {
   setSecondary: (id: string) => void
   toggleSidebar: () => void
   selectTask: (id: string | null) => void
+  startTaskCreation: () => void
+  showTaskList: () => void
   selectProject: (id: string | null) => void
   selectSession: (id: string, projectId: string | null) => void
   toggleProjectExpanded: (id: string) => void
@@ -99,6 +103,7 @@ export const useNavStore = create<NavState>()(
       },
       sidebarCollapsed: false,
       selectedTaskId: null,
+      taskCreateOpen: false,
       selectedProjectId: null,
       selectedSessionId: null,
       expandedProjectIds: [],
@@ -107,13 +112,26 @@ export const useNavStore = create<NavState>()(
       sidebarWidth: 240,
       rightPanelWidth: 320,
 
-      setSection: (section) => set({ activeSection: section }),
+      setSection: (section) =>
+        set({
+          activeSection: section,
+          // The draft fields live in the task view. Leaving that workspace
+          // discards the unsaved draft instead of returning to an empty shell.
+          ...(section === 'tasks' ? {} : { taskCreateOpen: false })
+        }),
       setSecondary: (id) =>
         set((s) => ({
-          activeSecondaryId: { ...s.activeSecondaryId, [s.activeSection]: id }
+          activeSecondaryId: { ...s.activeSecondaryId, [s.activeSection]: id },
+          // Task secondary navigation always resolves to a list. Keeping a
+          // detail open while its filter changes made the click appear broken.
+          ...(s.activeSection === 'tasks'
+            ? { selectedTaskId: null, taskCreateOpen: false }
+            : {})
         })),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-      selectTask: (id) => set({ selectedTaskId: id }),
+      selectTask: (id) => set({ selectedTaskId: id, taskCreateOpen: false }),
+      startTaskCreation: () => set({ selectedTaskId: null, taskCreateOpen: true }),
+      showTaskList: () => set({ selectedTaskId: null, taskCreateOpen: false }),
       selectProject: (id) =>
         set((state) => ({
           selectedProjectId: id,
@@ -145,7 +163,7 @@ export const useNavStore = create<NavState>()(
       closeRightPanel: () => set({ rightPanelOpen: false }),
       showAiRightPanel: (view) => set({ aiRightPanelView: view, rightPanelOpen: true }),
       setSidebarWidth: (w) => set({ sidebarWidth: clamp(w, 200, 360) }),
-      setRightPanelWidth: (w) => set({ rightPanelWidth: clamp(w, 300, 720) })
+      setRightPanelWidth: (w) => set({ rightPanelWidth: clamp(w, 300, 1200) })
     }),
     {
       name: NAV_STORAGE_KEY,

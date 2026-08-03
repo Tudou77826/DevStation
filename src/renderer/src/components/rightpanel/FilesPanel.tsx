@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertCircle, ArrowLeft, File, FileCode2, RefreshCw, Search } from 'lucide-react'
+import { AlertCircle, FileCode2, RefreshCw, Search, X } from 'lucide-react'
 import { useReviewStore } from '@/store/review'
 import { cn } from '@/lib/utils'
+import { CodeViewer, languageLabelForPath } from './CodeViewer'
+import { FileTree, type FileTreeExpansionCommand } from './FileTree'
+import { TreeExpansionControls } from './TreeExpansionControls'
 
 export function FilesPanel({ sessionId }: { sessionId: string }): React.ReactElement {
   const files = useReviewStore((state) => state.files)
@@ -13,10 +16,17 @@ export function FilesPanel({ sessionId }: { sessionId: string }): React.ReactEle
   const openFile = useReviewStore((state) => state.openFile)
   const closeFile = useReviewStore((state) => state.closeFile)
   const [query, setQuery] = useState('')
+  const [expansionCommand, setExpansionCommand] =
+    useState<FileTreeExpansionCommand | null>(null)
+
+  function setAllExpanded(expanded: boolean): void {
+    setExpansionCommand((current) => ({ id: (current?.id ?? 0) + 1, expanded }))
+  }
 
   useEffect(() => {
     void refresh(sessionId)
   }, [refresh, sessionId])
+
   const filtered = useMemo(() => {
     const keyword = query.trim().toLocaleLowerCase()
     return keyword === ''
@@ -24,102 +34,118 @@ export function FilesPanel({ sessionId }: { sessionId: string }): React.ReactEle
       : files.filter((file) => file.path.toLocaleLowerCase().includes(keyword))
   }, [files, query])
 
-  if (preview !== null) {
-    return (
-      <div className="min-h-full">
-        <div className="sticky top-0 flex items-center gap-2 border-b border-border bg-background px-3 py-2">
-          <button
-            type="button"
-            onClick={closeFile}
-            aria-label="返回文件列表"
-            className="text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft size={14} />
-          </button>
-          <span className="min-w-0 flex-1 truncate font-mono text-[10px]">
-            {preview.path}
-          </span>
-          <span className="text-[9px] text-muted-foreground">
-            {formatSize(preview.size)}
-          </span>
-        </div>
-        {preview.kind === 'text' ? (
-          <pre className="overflow-x-auto whitespace-pre p-3 font-mono text-[10px] leading-5 text-foreground/80">
-            {preview.content || '（空文件）'}
-          </pre>
-        ) : (
-          <div className="flex min-h-48 items-center justify-center px-5 text-center text-[11px] text-muted-foreground">
-            {preview.kind === 'binary'
-              ? '二进制文件不支持文本预览。'
-              : '文件超过 512 KB 预览上限。'}
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
-    <div className="p-3">
-      <div className="flex gap-2">
-        <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-input bg-card px-2">
-          <Search size={12} className="text-muted-foreground" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="筛选文件"
-            className="min-w-0 flex-1 bg-transparent text-[11px] outline-none"
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => void refresh(sessionId)}
-          aria-label="刷新文件"
-          className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
-        >
-          <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
-        </button>
-      </div>
-      {error !== null && (
-        <div className="mt-3 flex gap-2 rounded-md bg-status-error/10 p-2 text-[10px] text-status-error">
-          <AlertCircle size={12} />
-          {error}
-        </div>
-      )}
-      <div className="mt-3 space-y-0.5" role="tree" aria-label="项目文件">
-        {filtered.map((entry) => {
-          const segments = entry.path.split('/')
-          return (
+    <div className="flex h-full min-h-0 bg-background">
+      <section
+        className="min-w-0 flex-1 overflow-y-auto bg-card/20"
+        aria-label="文件预览"
+      >
+        {preview === null ? (
+          <WorkspaceHint text="从右侧文件树选择文件进行预览。" />
+        ) : (
+          <>
+            <div className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background px-3">
+              <FileCode2 size={13} className="shrink-0 text-muted-foreground" />
+              <span className="min-w-0 flex-1 truncate font-mono text-[11px]">
+                {preview.path}
+              </span>
+              <span className="text-[9px] text-muted-foreground">
+                {formatSize(preview.size)}
+              </span>
+              <span className="rounded border border-border bg-muted/70 px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+                {languageLabelForPath(preview.path)}
+              </span>
+              <button
+                type="button"
+                onClick={closeFile}
+                aria-label="关闭文件预览"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <X size={13} />
+              </button>
+            </div>
+            {preview.kind === 'text' ? (
+              <div className="min-h-0 overflow-auto bg-[var(--code-surface)]">
+                <CodeViewer code={preview.content || '（空文件）'} path={preview.path} />
+              </div>
+            ) : (
+              <WorkspaceHint
+                text={
+                  preview.kind === 'binary'
+                    ? '二进制文件不支持文本预览。'
+                    : '文件超过 512 KB 预览上限。'
+                }
+              />
+            )}
+          </>
+        )}
+      </section>
+
+      <aside
+        className="flex w-[300px] shrink-0 flex-col border-l border-border bg-background"
+        aria-label="项目文件导航"
+      >
+        <div className="shrink-0 border-b border-border p-2.5">
+          <div className="flex gap-1.5">
+            <label className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-input bg-card px-2">
+              <Search size={12} className="text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="筛选文件"
+                className="min-w-0 flex-1 bg-transparent text-[11px] outline-none"
+              />
+            </label>
+            <TreeExpansionControls
+              onCollapse={() => setAllExpanded(false)}
+              onExpand={() => setAllExpanded(true)}
+            />
             <button
-              key={entry.path}
               type="button"
-              role="treeitem"
-              onClick={() => void openFile(sessionId, entry.path)}
-              className="flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-[11px] hover:bg-accent"
-              style={{ paddingLeft: Math.min(segments.length - 1, 5) * 10 + 8 }}
-              title={entry.path}
+              onClick={() => void refresh(sessionId)}
+              aria-label="刷新文件"
+              className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent"
             >
-              <File size={12} className="shrink-0 text-muted-foreground" />
-              <span className="min-w-0 flex-1 truncate">{segments.at(-1)}</span>
-              {segments.length > 1 && (
-                <span className="max-w-24 truncate text-[9px] text-muted-foreground">
-                  {segments.slice(0, -1).join('/')}
-                </span>
-              )}
+              <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
             </button>
-          )
-        })}
-      </div>
-      {truncated && (
-        <p className="mt-3 text-[10px] text-status-warning">
-          文件过多，仅展示前 2000 项。
-        </p>
-      )}
-      {filtered.length === 0 && (
-        <div className="flex min-h-48 flex-col items-center justify-center text-[11px] text-muted-foreground">
-          <FileCode2 size={20} className="mb-2 opacity-50" />
-          没有匹配的文件。
+          </div>
+          {error !== null && (
+            <div className="mt-2 flex gap-2 rounded-md bg-status-error/10 p-2 text-[10px] text-status-error">
+              <AlertCircle size={12} className="shrink-0" />
+              {error}
+            </div>
+          )}
         </div>
-      )}
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+          <FileTree
+            entries={filtered.map((entry) => ({ path: entry.path }))}
+            ariaLabel="项目文件"
+            expansionCommand={expansionCommand}
+            onOpen={(path) => void openFile(sessionId, path)}
+          />
+          {truncated && (
+            <p className="mt-3 text-[10px] text-status-warning">
+              文件过多，仅展示前 2000 项。
+            </p>
+          )}
+          {filtered.length === 0 && (
+            <div className="flex min-h-40 flex-col items-center justify-center text-[11px] text-muted-foreground">
+              <FileCode2 size={20} className="mb-2 opacity-50" />
+              没有匹配的文件。
+            </div>
+          )}
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+function WorkspaceHint({ text }: { text: string }): React.ReactElement {
+  return (
+    <div className="flex h-full min-h-64 flex-col items-center justify-center px-6 text-center text-[11px] text-muted-foreground">
+      <FileCode2 size={24} strokeWidth={1.4} className="mb-3 opacity-45" />
+      {text}
     </div>
   )
 }

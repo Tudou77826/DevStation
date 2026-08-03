@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { IconRail } from './IconRail'
 import { NavTree } from './NavTree'
 import { UserMenu } from './UserMenu'
@@ -9,6 +10,7 @@ export function Sidebar(): React.ReactElement {
   const collapsed = useNavStore((s) => s.sidebarCollapsed)
   const width = useNavStore((s) => s.sidebarWidth)
   const setWidth = useNavStore((s) => s.setSidebarWidth)
+  const dragStartWidth = useRef(width)
 
   return (
     <div className="flex h-full">
@@ -16,9 +18,7 @@ export function Sidebar(): React.ReactElement {
       <div
         className={cn(
           'flex h-full flex-col bg-sidebar',
-          collapsed
-            ? 'w-0 overflow-hidden'
-            : 'border-r border-sidebar-border transition-[width] duration-150'
+          collapsed ? 'w-0 overflow-hidden' : 'border-r border-sidebar-border'
         )}
         style={collapsed ? undefined : { width }}
         aria-hidden={collapsed}
@@ -36,7 +36,10 @@ export function Sidebar(): React.ReactElement {
       {!collapsed && (
         <ResizeHandle
           side="right"
-          onDelta={(d) => setWidth(width + d)}
+          onDragStart={() => {
+            dragStartWidth.current = useNavStore.getState().sidebarWidth
+          }}
+          onDelta={(delta) => setWidth(dragStartWidth.current + delta)}
           title="拖拽调整侧边栏宽度"
         />
       )}

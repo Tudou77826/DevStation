@@ -38,7 +38,7 @@ export function Settings(): React.ReactElement {
       <SettingsSidebar active={active} onSelect={handleSelect} />
       <div className="flex min-h-0 flex-1 flex-col">
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-8 pt-10 pb-24">
+          <div className="flex w-full flex-col gap-10 px-8 pt-10 pb-24">
             {activePane.render()}
           </div>
         </div>

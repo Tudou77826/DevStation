@@ -39,7 +39,7 @@ beforeEach(() => {
 })
 
 describe('ChangesPanel', () => {
-  it('separates staged and worktree entries and opens the selected area', () => {
+  it('separates staged and unstaged entries and opens the selected area', () => {
     state.snapshot = {
       branch: 'main',
       head: 'abcdef123456',
@@ -57,13 +57,75 @@ describe('ChangesPanel', () => {
       ]
     }
     render(<ChangesPanel sessionId="s1" />)
-    expect(screen.getByText('暂存区 · 1')).toBeTruthy()
-    expect(screen.getByText('工作区 · 1')).toBeTruthy()
-    fireEvent.click(screen.getAllByText('src/a.ts')[1])
+    expect(
+      screen.getByRole('button', { name: '已暂存，1 个文件', expanded: true })
+    ).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: '未暂存，1 个文件', expanded: true })
+    ).toBeTruthy()
+    expect(screen.getAllByRole('treeitem', { name: /src/ })).toHaveLength(2)
+    fireEvent.click(screen.getAllByText('a.ts')[1])
     expect(actions.openDiff).toHaveBeenCalledWith('s1', 'src/a.ts', 'worktree')
   })
 
+  it('keeps untracked files in a separate group collapsed by default', () => {
+    state.snapshot = {
+      branch: 'main',
+      head: 'abcdef123456',
+      detached: false,
+      refreshedAt: 1,
+      truncated: false,
+      changes: [
+        {
+          path: 'src/tracked.ts',
+          previousPath: null,
+          stagedStatus: 'modified',
+          worktreeStatus: null,
+          conflicted: false
+        },
+        {
+          path: 'generated/noise.tmp',
+          previousPath: null,
+          stagedStatus: null,
+          worktreeStatus: 'untracked',
+          conflicted: false
+        }
+      ]
+    }
+    render(<ChangesPanel sessionId="s1" />)
+
+    expect(screen.queryByLabelText('变更筛选')).toBeNull()
+    const untracked = screen.getByRole('button', { name: '未跟踪，1 个文件' })
+    expect(untracked.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('noise.tmp')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: '全部展开文件夹' }))
+    expect(untracked.getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(screen.getByText('noise.tmp'))
+    expect(actions.openDiff).toHaveBeenCalledWith('s1', 'generated/noise.tmp', 'worktree')
+
+    fireEvent.click(screen.getByRole('button', { name: '全部收起文件夹' }))
+    expect(untracked.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('tracked.ts')).toBeNull()
+  })
+
   it('anchors exact comments and keeps changed lines in an explicit stale section', () => {
+    state.snapshot = {
+      branch: 'main',
+      head: 'abcdef123456',
+      detached: false,
+      refreshedAt: 1,
+      truncated: false,
+      changes: [
+        {
+          path: 'src/a.ts',
+          previousPath: null,
+          stagedStatus: null,
+          worktreeStatus: 'modified',
+          conflicted: false
+        }
+      ]
+    }
     state.selectedPath = 'src/a.ts'
     state.diff = {
       path: 'src/a.ts',
@@ -104,6 +166,8 @@ describe('ChangesPanel', () => {
       }
     ]
     render(<ChangesPanel sessionId="s1" />)
+    expect(screen.getByRole('complementary', { name: '变更文件导航' })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: /src/ })).toBeTruthy()
     expect(screen.getByText('仍然有效')).toBeTruthy()
     expect(screen.getByText('已失效意见 · 1')).toBeTruthy()
     expect(screen.getByText('不要漂移')).toBeTruthy()

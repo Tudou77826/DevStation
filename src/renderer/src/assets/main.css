@@ -87,6 +87,29 @@
   --status-success: #15803d;
   --status-warning: #b45309;
   --status-error: #dc2626;
+
+  --code-surface: #fbfcfe;
+  --code-gutter: #f4f6f8;
+  --code-gutter-border: #d8dee4;
+  --code-line-hover: #f1f4f7;
+  --code-comment: #57606a;
+  --code-red: #cf222e;
+  --code-blue: #0550ae;
+  --code-purple: #8250df;
+  --code-green: #116329;
+  --code-orange: #953800;
+
+  --diff-context-bg: #ffffff;
+  --diff-context-text: #24292f;
+  --diff-add-bg: #dafbe1;
+  --diff-add-gutter: #aceebb;
+  --diff-add-text: #116329;
+  --diff-delete-bg: #ffebe9;
+  --diff-delete-gutter: #ffc1ba;
+  --diff-delete-text: #82071e;
+  --diff-gutter-border: #d8dee4;
+  --diff-hunk-bg: #ddf4ff;
+  --diff-hunk-text: #0550ae;
 }
 
 /* ── Dark Mode (MVP default) ─────────────────────────── */
@@ -123,6 +146,29 @@
   --status-success: #22c55e;
   --status-warning: #f59e0b;
   --status-error: #ef4444;
+
+  --code-surface: #0d1117;
+  --code-gutter: #161b22;
+  --code-gutter-border: #30363d;
+  --code-line-hover: #161b22;
+  --code-comment: #8b949e;
+  --code-red: #ff7b72;
+  --code-blue: #79c0ff;
+  --code-purple: #d2a8ff;
+  --code-green: #7ee787;
+  --code-orange: #ffa657;
+
+  --diff-context-bg: #0d1117;
+  --diff-context-text: #c9d1d9;
+  --diff-add-bg: #12261a;
+  --diff-add-gutter: #1b4727;
+  --diff-add-text: #aff5b4;
+  --diff-delete-bg: #2d1719;
+  --diff-delete-gutter: #5a1e23;
+  --diff-delete-text: #ffdcd7;
+  --diff-gutter-border: #30363d;
+  --diff-hunk-bg: #14283d;
+  --diff-hunk-text: #a5d6ff;
 }
 
 @layer base {
@@ -185,4 +231,136 @@
 }
 .no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Code surfaces use semantic tokens so source and Diff remain readable in
+   both themes. Repository content is still rendered as text nodes. */
+.code-viewer {
+  background: var(--code-surface);
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.75;
+  font-variant-ligatures: none;
+  tab-size: 2;
+}
+.code-viewer-line {
+  display: flex;
+  min-height: 21px;
+}
+.code-viewer-line:hover {
+  background: var(--code-line-hover);
+}
+.code-viewer-line-number {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: none;
+  box-sizing: content-box;
+  padding: 0 12px 0 8px;
+  border-right: 1px solid var(--code-gutter-border);
+  background: var(--code-gutter);
+  color: var(--muted-foreground);
+  text-align: right;
+  user-select: none;
+}
+.code-viewer-code {
+  display: block;
+  padding: 0 18px;
+  white-space: pre;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--code-comment);
+  font-style: italic;
+}
+.token.punctuation {
+  color: var(--muted-foreground);
+}
+.token.property,
+.token.tag,
+.token.constant,
+.token.symbol,
+.token.deleted,
+.token.keyword {
+  color: var(--code-red);
+}
+.token.boolean,
+.token.number {
+  color: var(--code-blue);
+}
+.token.selector,
+.token.attr-name,
+.token.string,
+.token.char,
+.token.builtin,
+.token.inserted {
+  color: var(--code-green);
+}
+.token.operator,
+.token.entity,
+.token.url,
+.token.variable {
+  color: var(--code-orange);
+}
+.token.atrule,
+.token.attr-value,
+.token.function,
+.token.class-name,
+.token.regex,
+.token.important {
+  color: var(--code-purple);
+}
+.token.bold,
+.token.important {
+  font-weight: 650;
+}
+
+.diff-hunk-header {
+  border-block: 1px solid color-mix(in srgb, var(--diff-hunk-text) 20%, transparent);
+  background: var(--diff-hunk-bg);
+  color: var(--diff-hunk-text);
+}
+.diff-line {
+  min-height: 22px;
+  color: var(--diff-context-text);
+  font-variant-ligatures: none;
+  tab-size: 2;
+}
+.diff-line-context {
+  background: var(--diff-context-bg);
+}
+.diff-line-addition {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-text);
+}
+.diff-line-deletion {
+  background: var(--diff-delete-bg);
+  color: var(--diff-delete-text);
+}
+.diff-line-meta {
+  background: var(--diff-hunk-bg);
+  color: var(--diff-hunk-text);
+}
+.diff-line-number {
+  background: color-mix(in srgb, var(--diff-context-bg) 84%, var(--border));
+  color: var(--muted-foreground);
+}
+.diff-line-addition .diff-line-number,
+.diff-line-addition .diff-line-marker {
+  background: var(--diff-add-gutter);
+  color: var(--diff-add-text);
+}
+.diff-line-deletion .diff-line-number,
+.diff-line-deletion .diff-line-marker {
+  background: var(--diff-delete-gutter);
+  color: var(--diff-delete-text);
+}
+.diff-line-meta .diff-line-number,
+.diff-line-meta .diff-line-marker {
+  background: var(--diff-hunk-bg);
+  color: var(--diff-hunk-text);
 }
