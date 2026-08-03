@@ -60,7 +60,8 @@ function reset(): void {
     diff: null,
     comments: [],
     files: [],
-    filesTruncated: false,
+    loadedDirectories: [],
+    loadingDirectories: [],
     preview: null,
     loading: false,
     error: null
@@ -99,9 +100,18 @@ describe('review store', () => {
   })
 
   it('loads files and bounded previews, then clears selected views', async () => {
-    invoke.mockImplementation(async (method: string) => {
-      if (method === 'git.files')
-        return ok({ files: [{ path: 'src/a.ts' }], truncated: true })
+    invoke.mockImplementation(async (method: string, params: { path?: string }) => {
+      if (method === 'git.files') {
+        return params.path === ''
+          ? ok({
+              directory: '',
+              entries: [{ path: 'src', kind: 'directory' as const }]
+            })
+          : ok({
+              directory: 'src',
+              entries: [{ path: 'src/a.ts', kind: 'file' as const }]
+            })
+      }
       return ok({ path: 'src/a.ts', kind: 'text', content: 'line', size: 4 })
     })
     useReviewStore.setState({
@@ -110,12 +120,18 @@ describe('review store', () => {
     })
     await useReviewStore.getState().refreshFiles('s1')
     expect(useReviewStore.getState().preview).toBeNull()
+    await useReviewStore.getState().loadDirectory('s1', 'src')
+    await useReviewStore.getState().loadDirectory('s1', 'src')
     await useReviewStore.getState().openFile('s1', 'src/a.ts')
     expect(useReviewStore.getState()).toMatchObject({
-      files: [{ path: 'src/a.ts' }],
-      filesTruncated: true,
+      files: [
+        { path: 'src', kind: 'directory' },
+        { path: 'src/a.ts', kind: 'file' }
+      ],
+      loadedDirectories: ['', 'src'],
       preview: { content: 'line' }
     })
+    expect(invoke.mock.calls.filter(([method]) => method === 'git.files')).toHaveLength(2)
     useReviewStore.getState().closeFile()
     useReviewStore.setState({ selectedPath: 'src/a.ts', diff, comments: [comment] })
     useReviewStore.getState().closeDiff()

@@ -8,11 +8,13 @@ import { TreeExpansionControls } from './TreeExpansionControls'
 
 export function FilesPanel({ sessionId }: { sessionId: string }): React.ReactElement {
   const files = useReviewStore((state) => state.files)
+  const loadedDirectories = useReviewStore((state) => state.loadedDirectories)
+  const loadingDirectories = useReviewStore((state) => state.loadingDirectories)
   const preview = useReviewStore((state) => state.preview)
-  const truncated = useReviewStore((state) => state.filesTruncated)
   const loading = useReviewStore((state) => state.loading)
   const error = useReviewStore((state) => state.error)
   const refresh = useReviewStore((state) => state.refreshFiles)
+  const loadDirectory = useReviewStore((state) => state.loadDirectory)
   const openFile = useReviewStore((state) => state.openFile)
   const closeFile = useReviewStore((state) => state.closeFile)
   const [query, setQuery] = useState('')
@@ -109,6 +111,10 @@ export function FilesPanel({ sessionId }: { sessionId: string }): React.ReactEle
               <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
             </button>
           </div>
+          <div className="mt-2 flex items-center justify-between px-0.5 text-[9px] text-muted-foreground">
+            <span>{loading ? '正在读取项目根目录…' : `已加载 ${files.length} 项`}</span>
+            <span>展开目录时完整读取 · 不受 Git 忽略影响</span>
+          </div>
           {error !== null && (
             <div className="mt-2 flex gap-2 rounded-md bg-status-error/10 p-2 text-[10px] text-status-error">
               <AlertCircle size={12} className="shrink-0" />
@@ -119,16 +125,18 @@ export function FilesPanel({ sessionId }: { sessionId: string }): React.ReactEle
 
         <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
           <FileTree
-            entries={filtered.map((entry) => ({ path: entry.path }))}
+            entries={filtered.map((entry) => ({ path: entry.path, kind: entry.kind }))}
             ariaLabel="项目文件"
+            initiallyExpanded={false}
+            forceExpanded={query.trim() !== ''}
             expansionCommand={expansionCommand}
+            loadedDirectories={loadedDirectories}
+            loadingDirectories={loadingDirectories}
+            onDirectoryToggle={(path, expanded) => {
+              if (expanded) void loadDirectory(sessionId, path)
+            }}
             onOpen={(path) => void openFile(sessionId, path)}
           />
-          {truncated && (
-            <p className="mt-3 text-[10px] text-status-warning">
-              文件过多，仅展示前 2000 项。
-            </p>
-          )}
           {filtered.length === 0 && (
             <div className="flex min-h-40 flex-col items-center justify-center text-[11px] text-muted-foreground">
               <FileCode2 size={20} className="mb-2 opacity-50" />

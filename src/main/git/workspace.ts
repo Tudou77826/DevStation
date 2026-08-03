@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { readFile, realpath, stat } from 'node:fs/promises'
+import { readFile, readdir, realpath, stat } from 'node:fs/promises'
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import type { ProjectRepo, SessionRepo } from '../db/repositories'
 import { RpcError, invalidPath, notFound } from '../rpc/errors'
@@ -17,7 +17,7 @@ const GIT_TIMEOUT_MS = 8_000
 const STATUS_LIMIT = 2 * 1024 * 1024
 const DIFF_LIMIT = 2 * 1024 * 1024
 const PREVIEW_LIMIT = 512 * 1024
-const FILE_LIMIT = 2_000
+const CHANGE_LIMIT = 2_000
 
 interface GitResult {
   code: number | null
@@ -69,18 +69,31 @@ export class GitWorkspaceService {
     return parseUnifiedDiff(safePath, area, result.stdout)
   }
 
-  async files(sessionId: string): Promise<GitWorkspaceFileList> {
+  async files(sessionId: string, directory: string): Promise<GitWorkspaceFileList> {
     const root = this.rootForSession(sessionId)
-    const result = await runGit(
-      root,
-      ['ls-files', '-co', '--exclude-standard', '-z'],
-      STATUS_LIMIT
-    )
-    assertGitSuccess(result)
-    const paths = result.stdout.split('\0').filter(Boolean)
+    const safeDirectory = directory === '' ? '' : validateRelativePath(directory)
+    const absoluteDirectory = await containedPath(root, safeDirectory)
+    const directoryStat = await stat(absoluteDirectory)
+    if (!directoryStat.isDirectory()) throw invalidPath('只能读取项目目录')
+    const children = await readdir(absoluteDirectory, { withFileTypes: true })
+    const entries = children.map((entry) => ({
+      path: safeDirectory === '' ? entry.name : `${safeDirectory}/${entry.name}`,
+      kind: entry.isDirectory()
+        ? ('directory' as const)
+        : entry.isSymbolicLink()
+          ? ('symlink' as const)
+          : ('file' as const)
+    }))
+    entries.sort((left, right) => {
+      if (left.kind !== right.kind) {
+        if (left.kind === 'directory') return -1
+        if (right.kind === 'directory') return 1
+      }
+      return left.path.localeCompare(right.path)
+    })
     return {
-      files: paths.slice(0, FILE_LIMIT).map((path) => ({ path })),
-      truncated: paths.length > FILE_LIMIT
+      directory: safeDirectory,
+      entries
     }
   }
 
@@ -205,9 +218,9 @@ export function parseStatus(stdout: string, refreshedAt: number): GitRepositoryS
     branch,
     head,
     detached: branch === null && head !== null,
-    changes: changes.slice(0, FILE_LIMIT),
+    changes: changes.slice(0, CHANGE_LIMIT),
     refreshedAt,
-    truncated: changes.length > FILE_LIMIT
+    truncated: changes.length > CHANGE_LIMIT
   }
 }
 
@@ -317,8 +330,15 @@ export function validateRelativePath(path: string): string {
 }
 
 async function containedFile(root: string, path: string): Promise<string> {
+  return containedPath(root, path)
+}
+
+async function containedPath(root: string, path: string): Promise<string> {
   const canonicalRoot = await realpath(root)
-  const candidate = await realpath(resolve(canonicalRoot, ...path.split('/')))
+  const candidate =
+    path === ''
+      ? canonicalRoot
+      : await realpath(resolve(canonicalRoot, ...path.split('/')))
   const relation = relative(canonicalRoot, candidate)
   if (relation === '..' || relation.startsWith(`..${sep}`) || isAbsolute(relation)) {
     throw invalidPath('文件不在项目目录内')
@@ -339,8 +359,10 @@ function runGit(root: string, args: string[], limit: number): Promise<GitResult>
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe']
     })
-    let stdout = Buffer.alloc(0)
-    let stderr = Buffer.alloc(0)
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
+    let stdoutLength = 0
+    let stderrLength = 0
     let timedOut = false
     let exceeded = false
     let settled = false
@@ -354,22 +376,24 @@ function runGit(root: string, args: string[], limit: number): Promise<GitResult>
       clearTimeout(timer)
       resolveResult({
         code,
-        stdout: stdout.toString('utf8'),
-        stderr: stderr.toString('utf8'),
+        stdout: Buffer.concat(stdoutChunks, stdoutLength).toString('utf8'),
+        stderr: Buffer.concat(stderrChunks, stderrLength).toString('utf8'),
         timedOut,
         exceeded
       })
     }
     child.stdout.on('data', (chunk: Buffer) => {
-      stdout = Buffer.concat([stdout, chunk])
-      if (stdout.length > limit) {
+      stdoutChunks.push(chunk)
+      stdoutLength += chunk.length
+      if (stdoutLength > limit) {
         exceeded = true
         child.kill()
       }
     })
     child.stderr.on('data', (chunk: Buffer) => {
-      stderr = Buffer.concat([stderr, chunk])
-      if (stderr.length > 64 * 1024) child.kill()
+      stderrChunks.push(chunk)
+      stderrLength += chunk.length
+      if (stderrLength > 64 * 1024) child.kill()
     })
     child.on('error', () => finish(null))
     child.on('close', finish)

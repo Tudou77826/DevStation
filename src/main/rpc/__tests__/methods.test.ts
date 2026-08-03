@@ -188,8 +188,8 @@ describe('RPC method registry', () => {
     vi.mocked(ctx.gitWorkspace.status).mockResolvedValue({ changes: [] } as never)
     vi.mocked(ctx.gitWorkspace.diff).mockResolvedValue({ kind: 'empty' } as never)
     vi.mocked(ctx.gitWorkspace.files).mockResolvedValue({
-      files: [{ path: 'a.ts' }],
-      truncated: false
+      directory: '',
+      entries: [{ path: 'src', kind: 'directory' }]
     })
     vi.mocked(ctx.gitWorkspace.preview).mockResolvedValue({ kind: 'text' } as never)
 
@@ -199,14 +199,15 @@ describe('RPC method registry', () => {
     await expect(
       call('git.diff', { sessionId: 's1', path: 'src/a.ts', area: 'staged' }, ctx)
     ).resolves.toEqual({ kind: 'empty' })
-    await expect(call('git.files', { sessionId: 's1' }, ctx)).resolves.toEqual({
-      files: [{ path: 'a.ts' }],
-      truncated: false
+    await expect(call('git.files', { sessionId: 's1', path: '' }, ctx)).resolves.toEqual({
+      directory: '',
+      entries: [{ path: 'src', kind: 'directory' }]
     })
     await expect(
       call('git.preview', { sessionId: 's1', path: 'src/a.ts' }, ctx)
     ).resolves.toEqual({ kind: 'text' })
     expect(ctx.gitWorkspace.diff).toHaveBeenCalledWith('s1', 'src/a.ts', 'staged')
+    expect(ctx.gitWorkspace.files).toHaveBeenCalledWith('s1', '')
     expect(ctx.gitWorkspace.preview).toHaveBeenCalledWith('s1', 'src/a.ts')
   })
 

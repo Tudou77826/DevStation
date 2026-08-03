@@ -45,11 +45,12 @@ export interface GitFileDiff {
 
 export interface GitWorkspaceFile {
   path: string
+  kind: 'directory' | 'file' | 'symlink'
 }
 
 export interface GitWorkspaceFileList {
-  files: GitWorkspaceFile[]
-  truncated: boolean
+  directory: string
+  entries: GitWorkspaceFile[]
 }
 
 export interface GitFilePreview {
