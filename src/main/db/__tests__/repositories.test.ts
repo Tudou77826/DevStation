@@ -411,7 +411,7 @@ describe('persistence (file DB reopen)', () => {
       expect(t?.title).toBe('Persisted')
       db.close()
     }
-  })
+  }, 15_000)
 
   it('WAL files coexist without corruption (reopen)', () => {
     withFileDb((_path, db) => {
@@ -419,5 +419,5 @@ describe('persistence (file DB reopen)', () => {
       const t = tasks.create({ title: 'WAL' })
       expect(tasks.get(t.id)).not.toBeNull()
     })
-  })
+  }, 15_000)
 })

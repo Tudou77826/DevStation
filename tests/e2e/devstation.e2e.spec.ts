@@ -350,7 +350,10 @@ test('当前仓库变更、Diff 与本地行级意见在重启后恢复', async 
       .click()
     await inspector.getByPlaceholder('记录评审意见…').fill('确认常量命名是否符合约定')
     await inspector.getByRole('button', { name: '保存' }).click()
-    await expect(inspector.getByText('确认常量命名是否符合约定')).toBeVisible()
+    await expect(inspector.getByPlaceholder('记录评审意见…')).toBeHidden()
+    await expect(
+      inspector.getByRole('paragraph').filter({ hasText: '确认常量命名是否符合约定' })
+    ).toBeVisible()
 
     await page.getByRole('button', { name: '结束进程' }).click()
     await closeQuietly(app)
@@ -363,7 +366,11 @@ test('当前仓库变更、Diff 与本地行级意见在重启后恢复', async 
       .click()
     const restoredInspector = page.getByRole('complementary', { name: '上下文侧栏' })
     await restoredInspector.getByText('review.ts').click()
-    await expect(restoredInspector.getByText('确认常量命名是否符合约定')).toBeVisible()
+    await expect(
+      restoredInspector
+        .getByRole('paragraph')
+        .filter({ hasText: '确认常量命名是否符合约定' })
+    ).toBeVisible()
     await page.getByRole('button', { name: '结束进程' }).click()
   } finally {
     await closeQuietly(app)
