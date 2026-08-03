@@ -97,7 +97,7 @@ describe('navigation work context persistence', () => {
       rightPanelOpen: false,
       aiRightPanelView: 'files',
       sidebarWidth: 200,
-      rightPanelWidth: 480
+      rightPanelWidth: 720
     })
 
     const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}') as {
@@ -107,7 +107,7 @@ describe('navigation work context persistence', () => {
       activeSection: 'workflow',
       selectedSessionId: 'session-2',
       sidebarWidth: 200,
-      rightPanelWidth: 480
+      rightPanelWidth: 720
     })
   })
 })

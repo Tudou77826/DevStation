@@ -19,6 +19,10 @@ vi.mock('@/store/data', () => ({
   useDataStore: vi.fn()
 }))
 
+vi.mock('@/store/review', () => ({
+  useReviewStore: vi.fn()
+}))
+
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()

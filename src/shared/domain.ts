@@ -63,3 +63,19 @@ export interface Session {
   createdAt: number
   updatedAt: number
 }
+
+export type ReviewCommentSide = 'old' | 'new'
+
+/** Local-only review feedback. It is never written into the repository. */
+export interface ReviewComment {
+  id: string
+  sessionId: string
+  path: string
+  area: 'staged' | 'worktree'
+  side: ReviewCommentSide
+  line: number
+  lineContent: string
+  body: string
+  createdAt: number
+  updatedAt: number
+}

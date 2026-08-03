@@ -12,6 +12,8 @@ import { ResizeHandle } from '@/components/common/ResizeHandle'
 import { useNavStore } from '@/store/nav'
 import { useDataStore } from '@/store/data'
 import { cn } from '@/lib/utils'
+import { ChangesPanel } from './ChangesPanel'
+import { FilesPanel } from './FilesPanel'
 
 export function RightPanel(): React.ReactElement {
   const section = useNavStore((state) => state.activeSection)
@@ -104,17 +106,9 @@ export function RightPanel(): React.ReactElement {
             ) : session === null ? (
               <ProjectInspector projectId={project.id} />
             ) : aiView === 'changes' ? (
-              <PanelEmpty
-                icon={FileDiff}
-                title={`${session.title} 的变更`}
-                text="Agent 修改文件后，变更摘要和 Diff 入口将显示在这里。"
-              />
+              <ChangesPanel sessionId={session.id} />
             ) : (
-              <PanelEmpty
-                icon={FileCode2}
-                title={`${project.name} 的文件`}
-                text="项目文件树将作为 Agent 工作区的附属工具显示在这里。"
-              />
+              <FilesPanel sessionId={session.id} />
             ))}
 
           {section === 'workflow' && (

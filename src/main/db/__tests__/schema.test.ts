@@ -15,6 +15,7 @@ describe('schema + migrations', () => {
       expect(names).toContain('sessions')
       expect(names).toContain('agent_event_receipts')
       expect(names).toContain('agent_settings')
+      expect(names).toContain('review_comments')
     })
   })
 
@@ -101,6 +102,31 @@ describe('schema + migrations', () => {
       settings_json: '{}',
       updated_at: 123
     })
+    db.close()
+  })
+
+  it('upgrades v7 with the local review comment schema', () => {
+    const db = new Database(':memory:')
+    db.exec(`
+      CREATE TABLE sessions (id TEXT PRIMARY KEY);
+      PRAGMA user_version = 7;
+    `)
+    migrate(db)
+    expect(db.pragmaValue('user_version')).toBe(SCHEMA_VERSION)
+    const columns = db.prepare('PRAGMA table_info(review_comments)').all() as {
+      name: string
+    }[]
+    expect(columns.map((column) => column.name)).toEqual(
+      expect.arrayContaining([
+        'session_id',
+        'path',
+        'area',
+        'side',
+        'line',
+        'line_content',
+        'body'
+      ])
+    )
     db.close()
   })
 

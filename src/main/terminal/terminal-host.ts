@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { execFileSync } from 'node:child_process'
 import { spawn, type IPty } from 'node-pty'
 import type {
   HostDiagnostics,
@@ -20,6 +21,31 @@ interface HostedTerminal {
   stopRequested: boolean
 }
 
+type PtyTerminator = (terminal: IPty) => void
+
+/** Explicit stop owns the complete Windows console tree, not only the PTY shell wrapper. */
+export function terminatePtyTree(
+  terminal: Pick<IPty, 'pid' | 'kill'>,
+  platform = process.platform,
+  execute: typeof execFileSync = execFileSync
+): void {
+  if (platform !== 'win32') {
+    terminal.kill()
+    return
+  }
+  try {
+    execute('taskkill.exe', ['/PID', String(terminal.pid), '/T', '/F'], {
+      windowsHide: true,
+      stdio: 'ignore',
+      timeout: 3_000
+    })
+  } catch {
+    // The shell may already have exited between lookup and taskkill. node-pty
+    // remains the safe fallback and also covers unavailable taskkill binaries.
+    terminal.kill()
+  }
+}
+
 export interface TerminalHostEvents {
   data: [{ sessionId: string; data: string }]
   exit: [
@@ -38,7 +64,8 @@ export class TerminalHost extends EventEmitter<TerminalHostEvents> {
 
   constructor(
     private readonly processId = process.pid,
-    now: () => number = Date.now
+    now: () => number = Date.now,
+    private readonly terminate: PtyTerminator = terminatePtyTree
   ) {
     super()
     this.startedAt = now()
@@ -111,13 +138,13 @@ export class TerminalHost extends EventEmitter<TerminalHostEvents> {
     const hosted = this.get(sessionId)
     hosted.stopRequested = true
     this.sessions.delete(sessionId)
-    hosted.process.kill()
+    this.terminate(hosted.process)
   }
 
   closeAll(): void {
     for (const session of this.sessions.values()) {
       session.stopRequested = true
-      session.process.kill()
+      this.terminate(session.process)
     }
     this.sessions.clear()
   }

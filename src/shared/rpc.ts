@@ -4,7 +4,21 @@
 // RpcMethodMap is the single source of truth: every whitelisted method name
 // maps to its Zod-typed params and TS result type, so callers get static typing
 // and the dispatcher only accepts registered methods.
-import type { Project, Session, Task, TaskStatus } from './domain'
+import type {
+  Project,
+  ReviewComment,
+  ReviewCommentSide,
+  Session,
+  Task,
+  TaskStatus
+} from './domain'
+import type {
+  GitArea,
+  GitFileDiff,
+  GitFilePreview,
+  GitRepositorySnapshot,
+  GitWorkspaceFileList
+} from './git'
 import type {
   AgentCatalogEntry,
   AgentDiagnosticEntry,
@@ -85,6 +99,35 @@ export interface AgentSettingParam extends AgentIdParam {
   key: string
   value: AgentSettingValue | null
 }
+export interface SessionIdParam {
+  sessionId: string
+}
+export interface GitDiffParam extends SessionIdParam {
+  path: string
+  area: GitArea
+}
+export interface GitPreviewParam extends SessionIdParam {
+  path: string
+}
+export interface ReviewListParam extends SessionIdParam {
+  path?: string
+  area?: GitArea
+}
+export interface ReviewCreateParam extends SessionIdParam {
+  path: string
+  area: GitArea
+  side: ReviewCommentSide
+  line: number
+  lineContent: string
+  body: string
+}
+export interface ReviewUpdateParam extends SessionIdParam {
+  id: string
+  body: string
+}
+export interface ReviewDeleteParam extends SessionIdParam {
+  id: string
+}
 
 // ── The whitelist map: method name → { params, result } ──────────────────────
 
@@ -127,6 +170,16 @@ export interface RpcMethodMap {
   'sessions.listByTask': { params: TaskIdParam; result: Session[] }
   'sessions.listByProject': { params: ProjectIdParam; result: Session[] }
   'sessions.touch': { params: IdParam; result: Session }
+
+  'git.status': { params: SessionIdParam; result: GitRepositorySnapshot }
+  'git.diff': { params: GitDiffParam; result: GitFileDiff }
+  'git.files': { params: SessionIdParam; result: GitWorkspaceFileList }
+  'git.preview': { params: GitPreviewParam; result: GitFilePreview }
+
+  'reviews.list': { params: ReviewListParam; result: ReviewComment[] }
+  'reviews.create': { params: ReviewCreateParam; result: ReviewComment }
+  'reviews.update': { params: ReviewUpdateParam; result: ReviewComment }
+  'reviews.delete': { params: ReviewDeleteParam; result: { ok: true } }
 }
 
 export type RpcMethodName = keyof RpcMethodMap

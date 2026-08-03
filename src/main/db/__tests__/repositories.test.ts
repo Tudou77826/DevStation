@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { Database } from '../database'
 import { initializeDatabase } from '../schema'
-import { AgentSettingsRepo, TaskRepo, ProjectRepo, SessionRepo } from '../repositories'
+import {
+  AgentSettingsRepo,
+  ProjectRepo,
+  ReviewCommentRepo,
+  SessionRepo,
+  TaskRepo
+} from '../repositories'
 import { RpcError } from '../../rpc/errors'
 import { tmpDbPath, withDb, withFileDb, seedProject } from './helpers'
 
@@ -254,6 +260,64 @@ describe('SessionRepo + cascade', () => {
       const touched = sessions.touch(s.id)
       expect(touched.lastOpenedAt).not.toBeNull()
       expect(touched.updatedAt).toBe(updated0)
+    })
+  })
+})
+
+describe('ReviewCommentRepo', () => {
+  it('persists, filters, updates and deletes local line comments', () => {
+    withDb((db) => {
+      const { tasks, sessions } = repos(db)
+      const session = sessions.createFromTask(tasks.create({ title: 'Review' }).id)
+      const reviews = new ReviewCommentRepo(db)
+      const created = reviews.create({
+        sessionId: session.id,
+        path: 'src/a.ts',
+        area: 'worktree',
+        side: 'new',
+        line: 8,
+        lineContent: 'const value = 1',
+        body: '这里需要解释'
+      })
+
+      expect(reviews.list(session.id, 'src/a.ts', 'worktree')).toEqual([created])
+      expect(reviews.list(session.id, 'src/other.ts')).toEqual([])
+      expect(reviews.update(created.id, '更新后的意见').body).toBe('更新后的意见')
+      reviews.delete(created.id)
+      expect(reviews.get(created.id)).toBeNull()
+      expect(() => reviews.delete(created.id)).toThrowError(RpcError)
+    })
+  })
+
+  it('rejects unknown sessions and cascades with the owning task', () => {
+    withDb((db) => {
+      const { tasks, sessions } = repos(db)
+      const reviews = new ReviewCommentRepo(db)
+      expect(() =>
+        reviews.create({
+          sessionId: 'missing',
+          path: 'a.ts',
+          area: 'staged',
+          side: 'old',
+          line: 1,
+          lineContent: 'old',
+          body: 'comment'
+        })
+      ).toThrowError(RpcError)
+
+      const task = tasks.create({ title: 'Cascade' })
+      const session = sessions.createFromTask(task.id)
+      reviews.create({
+        sessionId: session.id,
+        path: 'a.ts',
+        area: 'staged',
+        side: 'old',
+        line: 1,
+        lineContent: 'old',
+        body: 'comment'
+      })
+      tasks.delete(task.id)
+      expect(reviews.list(session.id)).toEqual([])
     })
   })
 })

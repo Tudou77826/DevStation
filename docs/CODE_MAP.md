@@ -26,7 +26,8 @@
 | OpenCode 适配          | [`opencode-adapter.ts`](../src/main/agents/opencode-adapter.ts)、[`opencode-managed-integration.ts`](../src/main/agents/opencode-managed-integration.ts)                        | Adapter、会话定位与 Plugin 事件映射测试                       |
 | Chrys 适配             | [`chrys-adapter.ts`](../src/main/agents/chrys-adapter.ts)、[`chrys-managed-integration.ts`](../src/main/agents/chrys-managed-integration.ts)                                    | Adapter、Hook 增量合并与真实 Bridge 映射测试                  |
 | PowerShell Shell 选择  | [`launch-spec.ts`](../src/main/terminal/launch-spec.ts)                                                                                                                         | `launch-spec.test.ts`                                         |
-| Git 仓库校验           | [`src/main/git/`](../src/main/git/)                                                                                                                                             | `validate.test.ts`                                            |
+| Git 读取与安全边界     | [`workspace.ts`](../src/main/git/workspace.ts)                                                                                                                                  | 临时仓库测试覆盖状态、Diff、特殊路径、二进制与资源上限        |
+| Diff、评论与文件右栏   | [`ChangesPanel.tsx`](../src/renderer/src/components/rightpanel/ChangesPanel.tsx)、[`FilesPanel.tsx`](../src/renderer/src/components/rightpanel/FilesPanel.tsx)                  | `store/review.ts`、组件测试与 Electron 持久化 E2E             |
 | 应用设置与能力事实     | [`panes.tsx`](../src/renderer/src/components/settings/panes.tsx)                                                                                                                | `panes.test.tsx`                                              |
 | Coding Agent 设置      | [`CodingAgentsPane.tsx`](../src/renderer/src/components/settings/CodingAgentsPane.tsx)                                                                                          | `AgentSettingsService`、RPC、Schema 迁移、组件与 Electron E2E |
 | 质量门禁               | [`vitest.config.ts`](../vitest.config.ts)                                                                                                                                       | [`TESTING.md`](./TESTING.md)、CI                              |
@@ -54,6 +55,8 @@ shared/types.ts
 → Renderer 调用
 → 单元/组件测试 + Electron E2E
 ```
+
+Git 评审链路从 `shared/git.ts → main/git/workspace.ts → RPC → renderer/store/review.ts → 右栏组件` 定位。项目根只由 Main 根据会话解析；评论 Schema 和 CRUD 位于 `main/db/`。
 
 终端链路变更需同时检查：`TerminalPane → Preload → TerminalManager → HostClient → TerminalHost`。任何 UI 生命周期修改都必须证明 disconnect 不等于 close。
 

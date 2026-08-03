@@ -7,12 +7,14 @@ import type { ZodTypeAny } from 'zod'
 import type {
   AgentSettingsRepo,
   ProjectRepo,
+  ReviewCommentRepo,
   SessionRepo,
   TaskRepo
 } from '../db/repositories'
 import type { BrowserWindow } from 'electron'
 import type { AgentRegistry } from '../agents/registry'
 import type { AgentSettingsService } from '../agents/settings-service'
+import type { GitWorkspaceService } from '../git/workspace'
 
 export interface RpcContext {
   repositories: {
@@ -20,7 +22,9 @@ export interface RpcContext {
     projects: ProjectRepo
     sessions: SessionRepo
     agentSettings: AgentSettingsRepo
+    reviewComments: ReviewCommentRepo
   }
+  gitWorkspace: GitWorkspaceService
   agentRegistry: AgentRegistry
   agentSettings: AgentSettingsService
   /** the requesting window; some methods (dialog) need it */
