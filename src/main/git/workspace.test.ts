@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { writeFile as writeFileAsync } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -10,6 +9,7 @@ import {
   GitWorkspaceService,
   parseStatus,
   parseUnifiedDiff,
+  type WorkspaceDirectoryReader,
   validateRelativePath
 } from './workspace'
 
@@ -23,10 +23,11 @@ function write(path: string, content: string | Buffer): void {
   writeFileSync(join(root, path), content)
 }
 
-function service(): GitWorkspaceService {
+function service(readDirectory?: WorkspaceDirectoryReader): GitWorkspaceService {
   return new GitWorkspaceService(
     { get: () => ({ id: 'session', projectId: 'project' }) } as unknown as SessionRepo,
-    { get: () => ({ id: 'project', path: root }) } as unknown as ProjectRepo
+    { get: () => ({ id: 'project', path: root }) } as unknown as ProjectRepo,
+    readDirectory
   )
 }
 
@@ -157,17 +158,18 @@ describe('GitWorkspaceService', () => {
   })
 
   it('returns every repository file after the former 2000-item boundary', async () => {
-    await Promise.all(
-      Array.from({ length: 2_001 }, (_, index) =>
-        writeFileAsync(join(root, `bulk-${index.toString().padStart(4, '0')}.txt`), '')
-      )
-    )
+    const readDirectory: WorkspaceDirectoryReader = async () =>
+      Array.from({ length: 2_001 }, (_, index) => ({
+        name: `bulk-${index.toString().padStart(4, '0')}.txt`,
+        isDirectory: () => false,
+        isSymbolicLink: () => false
+      }))
 
-    const result = await service().files('session', '')
+    const result = await service(readDirectory).files('session', '')
     const files = result.entries.filter((entry) => entry.kind === 'file')
     expect(files).toHaveLength(2_001)
     expect(files.at(-1)).toEqual({ path: 'bulk-2000.txt', kind: 'file' })
-  }, 20_000)
+  })
 
   it('rejects traversal and sessions without a valid saved project', async () => {
     expect(() => validateRelativePath('../secret.txt')).toThrowError(RpcError)

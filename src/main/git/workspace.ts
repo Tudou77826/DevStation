@@ -27,10 +27,24 @@ interface GitResult {
   exceeded: boolean
 }
 
+export interface WorkspaceDirectoryEntry {
+  name: string
+  isDirectory(): boolean
+  isSymbolicLink(): boolean
+}
+
+export type WorkspaceDirectoryReader = (
+  path: string
+) => Promise<WorkspaceDirectoryEntry[]>
+
+const readWorkspaceDirectory: WorkspaceDirectoryReader = async (path) =>
+  readdir(path, { withFileTypes: true })
+
 export class GitWorkspaceService {
   constructor(
     private readonly sessions: SessionRepo,
-    private readonly projects: ProjectRepo
+    private readonly projects: ProjectRepo,
+    private readonly readDirectory: WorkspaceDirectoryReader = readWorkspaceDirectory
   ) {}
 
   async status(sessionId: string): Promise<GitRepositorySnapshot> {
@@ -75,7 +89,7 @@ export class GitWorkspaceService {
     const absoluteDirectory = await containedPath(root, safeDirectory)
     const directoryStat = await stat(absoluteDirectory)
     if (!directoryStat.isDirectory()) throw invalidPath('只能读取项目目录')
-    const children = await readdir(absoluteDirectory, { withFileTypes: true })
+    const children = await this.readDirectory(absoluteDirectory)
     const entries = children.map((entry) => ({
       path: safeDirectory === '' ? entry.name : `${safeDirectory}/${entry.name}`,
       kind: entry.isDirectory()
