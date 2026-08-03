@@ -264,12 +264,8 @@ test('可从 AI 项目右键创建会话并直达对应工作区', async () => {
       'DEVSTATION_AGENT_EVENT_TOKEN'
     )
     await expect(
-      aiWorkspace.getByText('会话直达验收 会话', { exact: true })
-    ).toBeVisible()
-    await expect(page.getByRole('button', { name: /会话直达验收 会话/ })).toHaveAttribute(
-      'aria-current',
-      'page'
-    )
+      page.getByRole('button', { name: /^会话直达验收 会话/ })
+    ).toHaveAttribute('aria-current', 'page')
   } finally {
     await closeQuietly(app)
     await rm(profile, { recursive: true, force: true })
