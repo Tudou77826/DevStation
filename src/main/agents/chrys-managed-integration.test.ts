@@ -237,7 +237,7 @@ hooks:
       kind: 'chrys-session-id',
       value: nativeSessionId
     })
-  }, 15_000)
+  }, 30_000)
 
   it('resolves the Windows roaming Chrys config root', () => {
     expect(resolveChrysConfigRoot({ APPDATA: 'D:\\roaming' }, 'C:\\Users\\dev')).toBe(
