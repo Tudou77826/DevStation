@@ -28,13 +28,34 @@ const mocks = vi.hoisted(() => {
     createdAt: 1,
     updatedAt: 1
   }
+  const createdSession = { ...session, id: 'session-2' }
+  const task = {
+    id: 'task-1',
+    title: '项目任务',
+    description: '',
+    status: 'todo' as const,
+    projectId: project.id,
+    branch: '',
+    sortOrder: 0,
+    pinned: false,
+    lastOpenedAt: null,
+    createdAt: 1,
+    updatedAt: 1
+  }
   return {
     data: {
-      tasks: [],
+      tasks: [task],
       projects: [project],
+      agents: [{ descriptor: { id: 'opencode', label: 'OpenCode' } }],
       sessionsByProject: { [project.id]: [session] },
       loadSessionsByProject: vi.fn(async () => [session]),
+      loadAgents: vi.fn(async () => []),
       touchSession: vi.fn(async () => undefined),
+      createTask: vi.fn(async () => task),
+      setTaskProject: vi.fn(async () => task),
+      deleteTask: vi.fn(async () => true),
+      createSessionFromTask: vi.fn(async () => createdSession),
+      errorMessage: vi.fn(() => '创建失败'),
       pickDirectory: vi.fn(async () => null),
       createProject: vi.fn(async () => null)
     },
@@ -52,9 +73,13 @@ const mocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('@/store/data', () => ({
-  useDataStore: (selector: (state: typeof mocks.data) => unknown) => selector(mocks.data)
-}))
+vi.mock('@/store/data', () => {
+  const useDataStore = Object.assign(
+    (selector: (state: typeof mocks.data) => unknown) => selector(mocks.data),
+    { getState: () => mocks.data }
+  )
+  return { useDataStore }
+})
 
 vi.mock('@/store/nav', async () => {
   const actual = await vi.importActual<typeof import('@/store/nav')>('@/store/nav')
@@ -81,5 +106,20 @@ describe('AI Space navigation tree', () => {
     fireEvent.click(screen.getByRole('button', { name: /Agent 验收会话/ }))
     expect(mocks.nav.selectSession).toHaveBeenCalledWith('session-1', 'project-1')
     expect(mocks.data.touchSession).toHaveBeenCalledWith('session-1')
+  })
+
+  it('starts an Agent session from the project context menu', async () => {
+    render(<NavTree />)
+
+    fireEvent.contextMenu(screen.getByRole('button', { name: 'DevStation' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '在此项目中新建会话' }))
+    expect(screen.getByRole('dialog', { name: '在 DevStation 中启动会话' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '创建并打开' }))
+
+    await waitFor(() =>
+      expect(mocks.data.createSessionFromTask).toHaveBeenCalledWith('task-1', 'opencode')
+    )
+    expect(mocks.nav.selectSession).toHaveBeenCalledWith('session-2', 'project-1')
+    expect(mocks.data.touchSession).toHaveBeenCalledWith('session-2')
   })
 })

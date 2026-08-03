@@ -93,7 +93,7 @@ test('任务、状态和工作会话在重启后恢复', async () => {
     await page.getByTitle('新建任务').click()
     const title = page.getByLabel('任务标题')
     await title.fill('持久化验收任务')
-    await title.press('Enter')
+    await page.getByRole('button', { name: '创建任务', exact: true }).click()
     await page.getByLabel('任务状态').selectOption('done')
     await page.getByRole('button', { name: '新建工作会话' }).click()
     await expect(page.getByText('1 个会话')).toBeVisible()
@@ -124,7 +124,7 @@ test('删除任务必须确认，并级联删除其工作会话', async () => {
     await page.getByTitle('新建任务').click()
     const title = page.getByLabel('任务标题')
     await title.fill('待删除验收任务')
-    await title.press('Enter')
+    await page.getByRole('button', { name: '创建任务', exact: true }).click()
     await page.getByRole('button', { name: '新建工作会话' }).click()
     await expect(page.getByText('1 个会话')).toBeVisible()
 
@@ -166,6 +166,7 @@ test('项目被任务引用时不可删除，解除引用后可以删除', async
 
     await page.getByRole('button', { name: '任务面板' }).click()
     await page.getByTitle('新建任务').click()
+    await page.getByLabel('任务标题').fill('项目引用验收')
     const projectOption = page
       .getByLabel('关联项目')
       .locator('option')
@@ -173,6 +174,7 @@ test('项目被任务引用时不可删除，解除引用后可以删除', async
     await expect(projectOption).toHaveCSS('background-color', 'rgb(17, 17, 17)')
     await expect(projectOption).toHaveCSS('color', 'rgb(250, 250, 250)')
     await page.getByLabel('关联项目').selectOption({ label: 'DevStation' })
+    await page.getByRole('button', { name: '创建任务', exact: true }).click()
 
     await page.getByRole('button', { name: 'AI 空间' }).click()
     page.once('dialog', (dialog) => dialog.accept())
@@ -222,7 +224,7 @@ test('右侧栏可重新呼出，并跟随当前一级工作区', async () => {
   }
 })
 
-test('任务详情中的工作会话可直达对应 AI 工作区', async () => {
+test('可从 AI 项目右键创建会话并直达对应工作区', async () => {
   const profile = await mkdtemp(join(tmpdir(), 'devstation-e2e-'))
   let app: ElectronApplication | null = null
 
@@ -236,12 +238,18 @@ test('任务详情中的工作会话可直达对应 AI 工作区', async () => {
     await page.getByTitle('新建任务').click()
     const title = page.getByLabel('任务标题')
     await title.fill('会话直达验收')
-    await title.press('Enter')
     await page.getByLabel('关联项目').selectOption({ label: 'DevStation' })
-    await page.getByLabel('Coding Agent').selectOption('test-agent-alt')
-    await page.getByRole('button', { name: '新建工作会话' }).click()
-
-    await page.getByRole('button', { name: /会话直达验收 会话/ }).click()
+    await page.getByRole('button', { name: '创建任务', exact: true }).click()
+    await page.getByRole('button', { name: 'AI 空间' }).click()
+    await page.getByRole('button', { name: 'DevStation', exact: true }).click({
+      button: 'right'
+    })
+    await page.getByRole('menuitem', { name: '在此项目中新建会话' }).click()
+    await page
+      .getByRole('dialog', { name: '在 DevStation 中启动会话' })
+      .getByLabel('Coding Agent')
+      .selectOption('test-agent-alt')
+    await page.getByRole('button', { name: '创建并打开' }).click()
 
     const aiWorkspace = page.getByRole('region', { name: 'AI 空间工作区' })
     await expect(aiWorkspace).toBeVisible()
@@ -256,12 +264,8 @@ test('任务详情中的工作会话可直达对应 AI 工作区', async () => {
       'DEVSTATION_AGENT_EVENT_TOKEN'
     )
     await expect(
-      aiWorkspace.getByText('会话直达验收 会话', { exact: true })
-    ).toBeVisible()
-    await expect(page.getByRole('button', { name: /会话直达验收 会话/ })).toHaveAttribute(
-      'aria-current',
-      'page'
-    )
+      page.getByRole('button', { name: /^会话直达验收 会话/ })
+    ).toHaveAttribute('aria-current', 'page')
   } finally {
     await closeQuietly(app)
     await rm(profile, { recursive: true, force: true })
@@ -330,8 +334,8 @@ test('当前仓库变更、Diff 与本地行级意见在重启后恢复', async 
     await page.getByRole('button', { name: '任务面板' }).click()
     await page.getByTitle('新建任务').click()
     await page.getByLabel('任务标题').fill('Diff 验收')
-    await page.getByLabel('任务标题').press('Enter')
     await page.getByLabel('关联项目').selectOption({ label: basename(repo) })
+    await page.getByRole('button', { name: '创建任务', exact: true }).click()
     await page.getByRole('button', { name: '新建工作会话' }).click()
     await page.getByRole('button', { name: /Diff 验收 会话/ }).click()
 
@@ -396,8 +400,8 @@ test('本机 OpenCode smoke：会话终端启动真实 OpenCode 进程', async (
     await page.getByTitle('新建任务').click()
     const title = page.getByLabel('任务标题')
     await title.fill('OpenCode smoke')
-    await title.press('Enter')
     await page.getByLabel('关联项目').selectOption({ label: 'DevStation' })
+    await page.getByRole('button', { name: '创建任务', exact: true }).click()
     await page.getByRole('button', { name: '新建工作会话' }).click()
 
     await page.getByRole('button', { name: /OpenCode smoke 会话/ }).click()
@@ -446,8 +450,8 @@ test('本机 Chrys smoke：会话终端启动真实 Chrys TUI 并接收生命周
     await page.getByTitle('新建任务').click()
     const title = page.getByLabel('任务标题')
     await title.fill('Chrys smoke')
-    await title.press('Enter')
     await page.getByLabel('关联项目').selectOption({ label: 'DevStation' })
+    await page.getByRole('button', { name: '创建任务', exact: true }).click()
     await page.getByLabel('Coding Agent').selectOption('chrys')
     await page.getByRole('button', { name: '新建工作会话' }).click()
 

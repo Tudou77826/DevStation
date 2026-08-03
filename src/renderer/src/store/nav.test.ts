@@ -63,6 +63,31 @@ describe('navigation work context persistence', () => {
     })
   })
 
+  it('returns task details and drafts to the selected task list', async () => {
+    const { useNavStore } = await import('./nav')
+    const actions = useNavStore.getState()
+    actions.setSection('tasks')
+    actions.selectTask('task-1')
+
+    useNavStore.getState().setSecondary('done')
+    expect(useNavStore.getState()).toMatchObject({
+      selectedTaskId: null,
+      taskCreateOpen: false,
+      activeSecondaryId: expect.objectContaining({ tasks: 'done' })
+    })
+
+    useNavStore.getState().startTaskCreation()
+    expect(useNavStore.getState()).toMatchObject({
+      selectedTaskId: null,
+      taskCreateOpen: true
+    })
+    useNavStore.getState().setSection('ai-space')
+    expect(useNavStore.getState().taskCreateOpen).toBe(false)
+    useNavStore.getState().startTaskCreation()
+    useNavStore.getState().showTaskList()
+    expect(useNavStore.getState().taskCreateOpen).toBe(false)
+  })
+
   it('keeps navigation and panel controls inside the persisted work context', async () => {
     const { secondaryIdOf, useNavStore } = await import('./nav')
     const actions = useNavStore.getState()
@@ -97,7 +122,7 @@ describe('navigation work context persistence', () => {
       rightPanelOpen: false,
       aiRightPanelView: 'files',
       sidebarWidth: 200,
-      rightPanelWidth: 720
+      rightPanelWidth: 900
     })
 
     const persisted = JSON.parse(localStorage.getItem(storageKey) ?? '{}') as {
@@ -107,7 +132,7 @@ describe('navigation work context persistence', () => {
       activeSection: 'workflow',
       selectedSessionId: 'session-2',
       sidebarWidth: 200,
-      rightPanelWidth: 720
+      rightPanelWidth: 900
     })
   })
 })

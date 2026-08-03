@@ -1,6 +1,6 @@
 {
   "name": "devstation",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "DevStation - Local AI-assisted development desktop app",
   "author": "DevStation",
   "license": "MIT",
@@ -42,6 +42,7 @@
     "@xterm/xterm": "^6.1.0-beta.287",
     "lucide-react": "^0.469.0",
     "node-pty": "^1.1.0",
+    "prismjs": "^1.30.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "yaml": "^2.9.0",
@@ -53,6 +54,7 @@
     "@tailwindcss/vite": "^4.2.4",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^22.10.0",
+    "@types/prismjs": "^1.26.6",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^4.3.4",

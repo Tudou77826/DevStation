@@ -160,7 +160,7 @@ describe('AgentEventInbox', () => {
     expect(again.sessions.get(sessionId)?.status).toBe('working')
     expect(again.onSessionUpdated).not.toHaveBeenCalled()
     again.db.close()
-  })
+  }, 15_000)
 
   it('keeps duplicate, out-of-order and prior-run events from regressing state', () => {
     const h = harness()

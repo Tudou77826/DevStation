@@ -33,7 +33,10 @@ const mocks = vi.hoisted(() => {
   const nav = {
     activeSecondaryId: { tasks: 'all' },
     selectedTaskId: null as string | null,
-    selectTask: vi.fn()
+    taskCreateOpen: false,
+    selectTask: vi.fn(),
+    startTaskCreation: vi.fn(),
+    showTaskList: vi.fn()
   }
   return { data, nav }
 })
@@ -58,6 +61,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   mocks.nav.selectedTaskId = null
+  mocks.nav.taskCreateOpen = false
 })
 
 describe('TaskPanel', () => {
@@ -82,5 +86,13 @@ describe('TaskPanel', () => {
     render(<TaskPanel />)
     expect(screen.getByRole('region', { name: '任务工作区' })).toBeTruthy()
     expect(screen.getByLabelText('主工作区任务详情')).toBeTruthy()
+  })
+
+  it('opens a draft instead of persisting a placeholder task', () => {
+    render(<TaskPanel />)
+    fireEvent.click(screen.getByTitle('新建任务'))
+
+    expect(mocks.nav.startTaskCreation).toHaveBeenCalledOnce()
+    expect(mocks.data.createTask).not.toHaveBeenCalled()
   })
 })

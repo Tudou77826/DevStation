@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   AlertCircle,
   FileCode2,
@@ -20,6 +20,7 @@ export function RightPanel(): React.ReactElement {
   const close = useNavStore((state) => state.closeRightPanel)
   const width = useNavStore((state) => state.rightPanelWidth)
   const setWidth = useNavStore((state) => state.setRightPanelWidth)
+  const dragStartWidth = useRef(width)
   const selectedProjectId = useNavStore((state) => state.selectedProjectId)
   const selectedSessionId = useNavStore((state) => state.selectedSessionId)
   const workflowView = useNavStore((state) => state.activeSecondaryId.workflow)
@@ -35,6 +36,12 @@ export function RightPanel(): React.ReactElement {
       : ((sessionsByProject[selectedProjectId] ?? []).find(
           (candidate) => candidate.id === selectedSessionId
         ) ?? null)
+  const compositeWorkspace = section === 'ai-space' && session !== null
+
+  useEffect(() => {
+    if (!compositeWorkspace || width >= 640) return
+    setWidth(Math.min(920, Math.max(640, Math.round(window.innerWidth * 0.52))))
+  }, [compositeWorkspace, setWidth, width])
 
   const title =
     section === 'tasks'
@@ -53,12 +60,18 @@ export function RightPanel(): React.ReactElement {
     <>
       <ResizeHandle
         side="left"
-        onDelta={(delta) => setWidth(width - delta)}
+        onDragStart={() => {
+          const storedWidth = useNavStore.getState().rightPanelWidth
+          dragStartWidth.current = compositeWorkspace
+            ? Math.min(storedWidth, window.innerWidth * 0.72)
+            : storedWidth
+        }}
+        onDelta={(delta) => setWidth(dragStartWidth.current - delta)}
         title="拖拽调整右侧栏宽度"
       />
       <aside
         className="flex shrink-0 flex-col border-l border-border bg-background"
-        style={{ width }}
+        style={{ width: compositeWorkspace ? `min(${width}px, 72vw)` : width }}
         aria-label="上下文侧栏"
       >
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
@@ -94,7 +107,12 @@ export function RightPanel(): React.ReactElement {
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div
+          className={cn(
+            'min-h-0 flex-1',
+            compositeWorkspace ? 'overflow-hidden' : 'overflow-y-auto'
+          )}
+        >
           {section === 'tasks' && <div aria-label="暂无任务附属内容" />}
 
           {section === 'ai-space' &&

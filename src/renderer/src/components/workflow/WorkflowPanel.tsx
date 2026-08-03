@@ -12,7 +12,7 @@ export function WorkflowPanel(): React.ReactElement {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-8 py-8">
+      <div className="w-full px-6 py-6">
         {/* header */}
         <div className="mb-1 flex items-center gap-2 text-muted-foreground">
           <Workflow size={16} strokeWidth={1.75} />

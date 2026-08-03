@@ -17,6 +17,7 @@ import {
 import { SECONDARY_NAV, useNavStore } from '@/store/nav'
 import { useDataStore } from '@/store/data'
 import { cn } from '@/lib/utils'
+import { ProjectContextMenu, ProjectSessionDialog } from './ProjectSessionLauncher'
 
 const ICONS: Record<string, LucideIcon> = {
   inbox: Inbox,
@@ -102,6 +103,12 @@ function AISpaceTree(): React.ReactElement {
   const [keyword, setKeyword] = useState('')
   const [agentFilter, setAgentFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [contextMenu, setContextMenu] = useState<{
+    projectId: string
+    x: number
+    y: number
+  } | null>(null)
+  const [sessionProjectId, setSessionProjectId] = useState<string | null>(null)
 
   useEffect(() => {
     const pending = projects
@@ -213,6 +220,14 @@ function AISpaceTree(): React.ReactElement {
         return (
           <div key={project.id} className="mb-1">
             <div
+              onContextMenu={(event) => {
+                event.preventDefault()
+                setContextMenu({
+                  projectId: project.id,
+                  x: event.clientX,
+                  y: event.clientY
+                })
+              }}
               className={cn(
                 'group flex items-center rounded-md transition-colors hover:bg-sidebar-accent/60',
                 projectActive && 'bg-sidebar-accent'
@@ -323,6 +338,23 @@ function AISpaceTree(): React.ReactElement {
           </div>
         )
       })}
+      {contextMenu !== null && (
+        <ProjectContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          onCreateSession={() => {
+            setSessionProjectId(contextMenu.projectId)
+            setContextMenu(null)
+          }}
+        />
+      )}
+      {sessionProjectId !== null && (
+        <ProjectSessionDialog
+          project={projects.find((project) => project.id === sessionProjectId)!}
+          onClose={() => setSessionProjectId(null)}
+        />
+      )}
     </div>
   )
 }

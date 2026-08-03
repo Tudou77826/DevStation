@@ -1,17 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle,
-  ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   FileDiff,
   MessageSquarePlus,
   Pencil,
   RefreshCw,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react'
 import type { ReviewComment } from '@shared/domain'
 import type { GitArea, GitChange, GitDiffLine, GitFileStatus } from '@shared/git'
 import { useReviewStore } from '@/store/review'
 import { cn } from '@/lib/utils'
+import { SyntaxCode } from './CodeViewer'
+import { FileTree, type FileTreeExpansionCommand } from './FileTree'
+import { TreeExpansionControls } from './TreeExpansionControls'
 
 export function ChangesPanel({ sessionId }: { sessionId: string }): React.ReactElement {
   const snapshot = useReviewStore((state) => state.snapshot)
@@ -20,6 +25,12 @@ export function ChangesPanel({ sessionId }: { sessionId: string }): React.ReactE
   const error = useReviewStore((state) => state.error)
   const refresh = useReviewStore((state) => state.refreshChanges)
   const openDiff = useReviewStore((state) => state.openDiff)
+  const [expansionCommand, setExpansionCommand] =
+    useState<FileTreeExpansionCommand | null>(null)
+
+  function setAllExpanded(expanded: boolean): void {
+    setExpansionCommand((current) => ({ id: (current?.id ?? 0) + 1, expanded }))
+  }
 
   useEffect(() => {
     void refresh(sessionId)
@@ -28,102 +39,175 @@ export function ChangesPanel({ sessionId }: { sessionId: string }): React.ReactE
     return () => window.removeEventListener('focus', onFocus)
   }, [refresh, sessionId])
 
-  if (selectedPath !== null) return <DiffView sessionId={sessionId} />
+  const changes = snapshot?.changes ?? []
+  const staged = changes.filter((change) => change.stagedStatus !== null)
+  const unstaged = changes.filter(
+    (change) => change.worktreeStatus !== null && change.worktreeStatus !== 'untracked'
+  )
+  const untracked = changes.filter((change) => change.worktreeStatus === 'untracked')
 
   return (
-    <div className="min-h-full p-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-[12px] font-medium text-foreground">
-            {snapshot?.branch ?? (snapshot?.detached ? 'Detached HEAD' : '当前仓库')}
+    <div className="flex h-full min-h-0 bg-background">
+      <section
+        className="min-w-0 flex-1 overflow-y-auto bg-card/20"
+        aria-label="Diff 评审区"
+      >
+        {selectedPath === null ? (
+          <Empty
+            text={
+              snapshot !== null && snapshot.changes.length === 0
+                ? '工作区干净，没有可评审的变更。'
+                : '从右侧变更树选择文件进行评审。'
+            }
+            fill
+          />
+        ) : (
+          <DiffView sessionId={sessionId} />
+        )}
+      </section>
+
+      <aside
+        className="flex w-[300px] shrink-0 flex-col border-l border-border bg-background"
+        aria-label="变更文件导航"
+      >
+        <div className="shrink-0 border-b border-border p-2.5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="truncate text-[12px] font-medium text-foreground">
+                {snapshot?.branch ?? (snapshot?.detached ? 'Detached HEAD' : '当前仓库')}
+              </div>
+              <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
+                {snapshot?.head?.slice(0, 10) ?? '尚无提交'}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <TreeExpansionControls
+                onCollapse={() => setAllExpanded(false)}
+                onExpand={() => setAllExpanded(true)}
+              />
+              <button
+                type="button"
+                onClick={() => void refresh(sessionId)}
+                aria-label="刷新变更"
+                title="刷新变更"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
+              </button>
+            </div>
           </div>
-          <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
-            {snapshot?.head?.slice(0, 10) ?? '尚无提交'}
-          </div>
+          {error !== null && <ErrorMessage text={error} />}
         </div>
-        <button
-          type="button"
-          onClick={() => void refresh(sessionId)}
-          aria-label="刷新变更"
-          title="刷新变更"
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <RefreshCw size={13} className={cn(loading && 'animate-spin')} />
-        </button>
-      </div>
-      {error !== null && <ErrorMessage text={error} />}
-      {snapshot !== null && snapshot.changes.length === 0 && (
-        <Empty text="工作区干净，没有可评审的变更。" />
-      )}
-      <div className="mt-3 space-y-3">
-        <ChangeGroup
-          label="暂存区"
-          area="staged"
-          changes={
-            snapshot?.changes.filter((change) => change.stagedStatus !== null) ?? []
-          }
-          onOpen={(path) => void openDiff(sessionId, path, 'staged')}
-        />
-        <ChangeGroup
-          label="工作区"
-          area="worktree"
-          changes={
-            snapshot?.changes.filter((change) => change.worktreeStatus !== null) ?? []
-          }
-          onOpen={(path) => void openDiff(sessionId, path, 'worktree')}
-        />
-      </div>
-      {snapshot?.truncated === true && (
-        <p className="mt-3 text-[10px] text-status-warning">
-          文件过多，仅展示前 2000 项。
-        </p>
-      )}
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+          <div className="space-y-3">
+            <ChangeGroup
+              label="已暂存"
+              tone="success"
+              area="staged"
+              changes={staged}
+              expansionCommand={expansionCommand}
+              onOpen={(path) => void openDiff(sessionId, path, 'staged')}
+            />
+            <ChangeGroup
+              label="未暂存"
+              tone="warning"
+              area="worktree"
+              changes={unstaged}
+              expansionCommand={expansionCommand}
+              onOpen={(path) => void openDiff(sessionId, path, 'worktree')}
+            />
+            <ChangeGroup
+              label="未跟踪"
+              tone="muted"
+              area="worktree"
+              changes={untracked}
+              defaultCollapsed
+              expansionCommand={expansionCommand}
+              onOpen={(path) => void openDiff(sessionId, path, 'worktree')}
+            />
+          </div>
+          {snapshot?.truncated === true && (
+            <p className="mt-3 text-[10px] text-status-warning">
+              文件过多，仅展示前 2000 项。
+            </p>
+          )}
+        </div>
+      </aside>
     </div>
   )
 }
 
 function ChangeGroup({
   label,
+  tone,
   area,
   changes,
+  defaultCollapsed = false,
+  expansionCommand,
   onOpen
 }: {
   label: string
+  tone: 'success' | 'warning' | 'muted'
   area: GitArea
   changes: GitChange[]
+  defaultCollapsed?: boolean
+  expansionCommand: FileTreeExpansionCommand | null
   onOpen: (path: string) => void
 }): React.ReactElement | null {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed)
+  useEffect(() => {
+    if (expansionCommand !== null) setCollapsed(!expansionCommand.expanded)
+  }, [expansionCommand])
   if (changes.length === 0) return null
   return (
     <section>
-      <h3 className="mb-1 px-1 text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-        {label} · {changes.length}
-      </h3>
-      <div className="space-y-0.5">
-        {changes.map((change) => {
-          const status = area === 'staged' ? change.stagedStatus : change.worktreeStatus
-          return (
-            <button
-              key={`${area}:${change.path}`}
-              type="button"
-              onClick={() => onOpen(change.path)}
-              className="group flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-            >
-              <StatusBadge status={status} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[11px] text-foreground">
-                  {change.path}
-                </span>
-                {change.previousPath !== null && (
-                  <span className="block truncate text-[9px] text-muted-foreground">
-                    原路径：{change.previousPath}
-                  </span>
-                )}
-              </span>
-            </button>
-          )
-        })}
-      </div>
+      <button
+        type="button"
+        aria-label={`${label}，${changes.length} 个文件`}
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed((current) => !current)}
+        className="mb-1 flex h-7 w-full items-center gap-2 rounded-md bg-muted/55 px-2 text-left text-[10px] font-medium tracking-[0.08em] text-foreground/80 hover:bg-muted"
+      >
+        <span
+          className={cn(
+            'h-1.5 w-1.5 shrink-0 rounded-full',
+            tone === 'success'
+              ? 'bg-status-success'
+              : tone === 'warning'
+                ? 'bg-status-warning'
+                : 'bg-muted-foreground/45'
+          )}
+        />
+        <span className="min-w-0 flex-1">{label}</span>
+        <span className="tabular-nums text-muted-foreground">{changes.length}</span>
+        {collapsed ? (
+          <ChevronRight size={11} className="text-muted-foreground" />
+        ) : (
+          <ChevronDown size={11} className="text-muted-foreground" />
+        )}
+      </button>
+      {!collapsed && (
+        <div className="ml-2 border-l border-border/70 pl-1.5">
+          <FileTree
+            ariaLabel={`${label}文件树`}
+            expansionCommand={expansionCommand}
+            entries={changes.map((change) => ({
+              path: change.path,
+              prefix: (
+                <StatusBadge
+                  status={area === 'staged' ? change.stagedStatus : change.worktreeStatus}
+                />
+              ),
+              secondary:
+                change.previousPath === null
+                  ? undefined
+                  : `原路径：${change.previousPath}`
+            }))}
+            onOpen={onOpen}
+          />
+        </div>
+      )}
     </section>
   )
 }
@@ -149,15 +233,8 @@ function DiffView({ sessionId }: { sessionId: string }): React.ReactElement {
 
   return (
     <div className="min-h-full">
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-background px-3 py-2">
-        <button
-          type="button"
-          onClick={close}
-          aria-label="返回变更列表"
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft size={14} />
-        </button>
+      <div className="sticky top-0 z-10 flex h-11 items-center gap-2 border-b border-border bg-background px-3">
+        <FileDiff size={13} className="shrink-0 text-muted-foreground" />
         <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-foreground">
           {diff?.path ?? '正在读取…'}
         </span>
@@ -166,6 +243,14 @@ function DiffView({ sessionId }: { sessionId: string }): React.ReactElement {
             {diff.area === 'staged' ? '暂存区' : '工作区'}
           </span>
         )}
+        <button
+          type="button"
+          onClick={close}
+          aria-label="关闭 Diff"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <X size={13} />
+        </button>
       </div>
       {error !== null && (
         <div className="px-3">
@@ -175,7 +260,7 @@ function DiffView({ sessionId }: { sessionId: string }): React.ReactElement {
       {diff !== null && diff.kind !== 'text' && <Empty text={diffStateText(diff.kind)} />}
       {diff?.hunks.map((hunk) => (
         <div key={hunk.header} className="border-b border-border">
-          <div className="bg-blue-500/10 px-3 py-1.5 font-mono text-[9px] text-blue-500">
+          <div className="diff-hunk-header px-3 py-1.5 font-mono text-[10px]">
             {hunk.header}
           </div>
           {hunk.lines.map((line, index) => {
@@ -185,22 +270,22 @@ function DiffView({ sessionId }: { sessionId: string }): React.ReactElement {
               <div key={key}>
                 <div
                   className={cn(
-                    'group flex min-w-0 font-mono text-[10px] leading-5',
+                    'diff-line group flex min-w-max font-mono text-[11px] leading-5',
                     lineTone(line)
                   )}
                 >
-                  <span className="w-8 shrink-0 select-none text-right text-foreground/30">
+                  <span className="diff-line-number w-10 shrink-0 select-none border-r border-[var(--diff-gutter-border)] pr-2 text-right">
                     {line.oldLine ?? ''}
                   </span>
-                  <span className="w-8 shrink-0 select-none pr-1 text-right text-foreground/30">
+                  <span className="diff-line-number w-10 shrink-0 select-none border-r border-[var(--diff-gutter-border)] pr-2 text-right">
                     {line.newLine ?? ''}
                   </span>
-                  <span className="w-4 shrink-0 select-none text-center text-foreground/40">
+                  <span className="diff-line-marker w-6 shrink-0 select-none text-center font-semibold">
                     {lineMarker(line)}
                   </span>
-                  <span className="min-w-0 flex-1 whitespace-pre-wrap break-all pr-1">
-                    {line.text || ' '}
-                  </span>
+                  <code className="min-w-0 flex-1 whitespace-pre pr-4">
+                    <SyntaxCode code={line.text || ' '} path={diff.path} />
+                  </code>
                   {commentable(line) && (
                     <button
                       type="button"
@@ -419,10 +504,12 @@ function lineMarker(line: GitDiffLine): string {
 }
 function lineTone(line: GitDiffLine): string {
   return line.kind === 'addition'
-    ? 'bg-green-500/10 text-green-200'
+    ? 'diff-line-addition'
     : line.kind === 'deletion'
-      ? 'bg-red-500/10 text-red-200'
-      : 'text-foreground/75'
+      ? 'diff-line-deletion'
+      : line.kind === 'meta'
+        ? 'diff-line-meta'
+        : 'diff-line-context'
 }
 function diffStateText(kind: 'binary' | 'too-large' | 'empty'): string {
   return kind === 'binary'
@@ -439,9 +526,20 @@ function ErrorMessage({ text }: { text: string }): React.ReactElement {
     </div>
   )
 }
-function Empty({ text }: { text: string }): React.ReactElement {
+function Empty({
+  text,
+  fill = false
+}: {
+  text: string
+  fill?: boolean
+}): React.ReactElement {
   return (
-    <div className="flex min-h-48 flex-col items-center justify-center px-4 text-center text-[11px] text-muted-foreground">
+    <div
+      className={cn(
+        'flex min-h-48 flex-col items-center justify-center px-4 text-center text-[11px] text-muted-foreground',
+        fill && 'h-full'
+      )}
+    >
       <FileDiff size={20} className="mb-2 opacity-50" />
       {text}
     </div>
