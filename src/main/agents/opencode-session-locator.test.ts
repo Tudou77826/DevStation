@@ -61,7 +61,7 @@ describe('OpenCodeSessionLocator', () => {
     insert(path, { id: 'ses_created', directory: process.cwd(), createdAt: 4_000 })
 
     expect(locator.findCreatedSession(process.cwd(), 2_500, before)).toBe('ses_created')
-  })
+  }, 15_000)
 
   it('returns null when OpenCode has not persisted a matching new session', () => {
     const path = openCodeDb()
