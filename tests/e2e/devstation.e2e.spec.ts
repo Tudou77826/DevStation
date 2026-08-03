@@ -406,11 +406,8 @@ test('文件侧栏完整读取真实目录并显示 Git 忽略内容', async () 
     await page.getByRole('button', { name: '新建工作会话' }).click()
     await page.getByRole('button', { name: /文件系统验收 会话/ }).click()
 
-    await page
-      .getByRole('region', { name: 'AI 空间工作区' })
-      .getByRole('button', { name: '文件', exact: true })
-      .click()
     const inspector = page.getByRole('complementary', { name: '上下文侧栏' })
+    await inspector.getByRole('button', { name: '文件', exact: true }).click()
     await expect(
       inspector.getByRole('button', { name: '.git', exact: true })
     ).toBeVisible()
